@@ -70,3 +70,41 @@ class SmolVLAPreprocessingConfig:
     action_mean: list[float] | None = None
     action_std: list[float] | None = None
     device: str = "cpu"
+
+
+@dataclass
+class DiffusionPolicyPreprocessingConfig:
+    """Configuration for Diffusion Policy model preprocessing.
+
+    Attributes:
+        camera_names: List of camera names to extract from Sample. Order matters!
+        image_config: Image preprocessing settings
+        obs_horizon: Number of past observations to stack (observation history)
+        action_horizon: Number of future actions to predict (action chunking)
+        state_mean: State normalization mean (computed from dataset)
+        state_std: State normalization std (computed from dataset)
+        action_mean: Action normalization mean (computed from dataset)
+        action_std: Action normalization std (computed from dataset)
+        device: Device to move tensors to (cpu, cuda, mps)
+
+    Note:
+        Unlike SmolVLA, Diffusion Policy does not pad state/action to fixed dimensions.
+        State and action tensors retain their natural dimensions.
+    """
+
+    camera_names: list[str] = field(default_factory=lambda: ["observation.image"])
+    image_config: ImagePreprocessingConfig = field(
+        default_factory=lambda: ImagePreprocessingConfig(
+            target_size=(96, 96),
+            resize_with_padding=False,
+            normalize=False,  # Diffusion Policy typically normalizes to [0,1] not ImageNet
+            to_tensor=True,
+        )
+    )
+    obs_horizon: int = 2  # Number of past observations to stack
+    action_horizon: int = 8  # Number of future actions to predict
+    state_mean: list[float] | None = None
+    state_std: list[float] | None = None
+    action_mean: list[float] | None = None
+    action_std: list[float] | None = None
+    device: str = "cpu"
