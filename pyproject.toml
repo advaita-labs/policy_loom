@@ -11,6 +11,9 @@ dependencies = [
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
     "mcap>=1.0.0",
+    "torch>=2.0.0",
+    "transformers>=4.30.0",
+    "pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]
@@ -62,6 +65,11 @@ check_untyped_defs = true
 strict_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
