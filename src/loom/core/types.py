@@ -128,3 +128,41 @@ class SmolVLABatchInput:
     language_attention_mask: torch.Tensor
     state: torch.Tensor
     action: torch.Tensor
+
+
+@dataclass
+class DiffusionPolicyInput:
+    """Preprocessed input for Diffusion Policy model (single sample, unbatched).
+
+    This represents a single preprocessed sample ready for the model.
+    Use DiffusionPolicyPreprocessor.collate_fn() to batch multiple inputs.
+
+    Attributes:
+        observation_images: Dict mapping camera names to stacked image tensors.
+            Each tensor has shape (obs_horizon, C, H, W) - observation history
+        state: Stacked state tensor, shape (obs_horizon, state_dim) - observation history
+        action: Action chunk tensor, shape (action_horizon, action_dim) - future actions
+    """
+
+    observation_images: dict[str, torch.Tensor]
+    state: torch.Tensor
+    action: torch.Tensor
+
+
+@dataclass
+class DiffusionPolicyBatchInput:
+    """Batched input for Diffusion Policy model training.
+
+    This is the format expected by Diffusion Policy model's forward pass.
+    All tensors have batch dimension as first dimension.
+
+    Attributes:
+        observation_images: Dict mapping camera names to batched image tensors.
+            Each tensor has shape (B, obs_horizon, C, H, W)
+        state: Batched state tensor, shape (B, obs_horizon, state_dim)
+        action: Batched action tensor, shape (B, action_horizon, action_dim)
+    """
+
+    observation_images: dict[str, torch.Tensor]
+    state: torch.Tensor
+    action: torch.Tensor
