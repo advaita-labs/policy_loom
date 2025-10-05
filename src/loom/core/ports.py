@@ -3,9 +3,13 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, Generic, TypeVar
 
 from loom.core.types import Sample
+
+# Type variables for generic Preprocessor
+TInput = TypeVar("TInput")  # Single sample input type
+TBatchInput = TypeVar("TBatchInput")  # Batched input type
 
 
 class Reader(ABC):
@@ -144,3 +148,61 @@ class Exporter(ABC):
             True if valid, False otherwise
         """
         ...
+
+
+class Preprocessor(ABC, Generic[TInput, TBatchInput]):
+    """Abstract base class for model-specific preprocessing.
+
+    A Preprocessor is responsible for:
+    - Converting Sample objects to model-specific input format
+    - Handling tokenization, normalization, padding
+    - Batching and collation for DataLoader
+    - Managing model-specific state (tokenizers, normalization stats)
+
+    Type Parameters:
+        TInput: Type of single sample input (unbatched)
+        TBatchInput: Type of batched input for model
+
+    Example:
+        >>> from loom.preprocessing.smolvla import SmolVLAPreprocessor
+        >>> from loom.core.types import SmolVLAInput, SmolVLABatchInput
+        >>>
+        >>> preprocessor: Preprocessor[SmolVLAInput, SmolVLABatchInput]
+        >>> preprocessor = SmolVLAPreprocessor(config)
+    """
+
+    @abstractmethod
+    def preprocess_sample(self, sample: Sample) -> TInput:
+        """Convert a single Sample to model input format (unbatched).
+
+        Args:
+            sample: Input sample with cameras, proprio, action, metadata
+
+        Returns:
+            Model-specific input dataclass without batch dimension
+
+        Raises:
+            ValueError: If sample is missing required fields
+        """
+        ...
+
+    @abstractmethod
+    def collate_fn(self, batch: list[TInput]) -> TBatchInput:
+        """Collate list of preprocessed samples into batched model input.
+
+        This is designed to be used as collate_fn in PyTorch DataLoader.
+
+        Args:
+            batch: List of preprocessed inputs from preprocess_sample()
+
+        Returns:
+            Batched model input dataclass with all tensors having batch dimension
+
+        Raises:
+            ValueError: If batch contains inconsistent shapes
+        """
+        ...
+
+    def __call__(self, sample: Sample) -> TInput:
+        """Convenience method. Equivalent to preprocess_sample()."""
+        return self.preprocess_sample(sample)

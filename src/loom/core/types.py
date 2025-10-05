@@ -5,6 +5,7 @@ from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+import torch
 
 
 @dataclass
@@ -80,3 +81,50 @@ class Sample:
         if self.get_camera(name) is not None:
             raise ValueError(f"Camera '{name}' already exists in sample")
         self.cameras.append(CameraImage(name=name, image=image))
+
+
+# Model Input Types
+
+
+@dataclass
+class SmolVLAInput:
+    """Preprocessed input for SmolVLA model (single sample, unbatched).
+
+    This represents a single preprocessed sample ready for the model.
+    Use SmolVLAPreprocessor.collate_fn() to batch multiple inputs.
+
+    Attributes:
+        images: List of preprocessed image tensors, shape (C, H, W) each
+        language_instruction: Task instruction string
+        state: Proprioceptive state tensor, shape (state_dim,) or (n_obs_steps, state_dim)
+        action: Action tensor, shape (action_dim,) or (chunk_size, action_dim)
+    """
+
+    images: list[torch.Tensor]
+    language_instruction: str
+    state: torch.Tensor
+    action: torch.Tensor
+
+
+@dataclass
+class SmolVLABatchInput:
+    """Batched input for SmolVLA model training.
+
+    This is the format expected by SmolVLA model's forward pass.
+    All tensors have batch dimension as first dimension.
+
+    Attributes:
+        observation_images: Dictionary mapping camera names to image tensors.
+            Keys: "observation.image", "observation.image_1", etc.
+            Values: Tensors of shape (B, C, H, W)
+        language_tokens: Tokenized language input, shape (B, seq_len)
+        language_attention_mask: Attention mask for language tokens, shape (B, seq_len)
+        state: Proprioceptive state, shape (B, n_obs_steps, state_dim)
+        action: Action trajectory, shape (B, chunk_size, action_dim)
+    """
+
+    observation_images: dict[str, torch.Tensor]
+    language_tokens: torch.Tensor
+    language_attention_mask: torch.Tensor
+    state: torch.Tensor
+    action: torch.Tensor
