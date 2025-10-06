@@ -8,6 +8,7 @@ import torch.nn as nn
 from diffusers import DDPMScheduler
 from torch.utils.data import DataLoader, Dataset
 
+from loom.io.lerobot import collate_lerobot_batch
 from loom.training.adapter import register_adapter
 
 logger = logging.getLogger(__name__)
@@ -181,7 +182,7 @@ class DiffusionPolicyAdapter:
             model: DiffusionPolicyUNet model
             batch: Batch dict with keys:
                 - 'observation': Observations (B, obs_dim)
-                - 'action': Ground truth actions (B, action_horizon, action_dim)
+                - 'action': Ground truth actions (B, action_dim) or (B, action_horizon, action_dim)
             device: Device to run on
 
         Returns:
@@ -189,7 +190,12 @@ class DiffusionPolicyAdapter:
         """
         # Move data to device
         obs = batch["observation"].to(device)  # (B, obs_dim)
-        action = batch["action"].to(device)  # (B, action_horizon, action_dim)
+        action = batch["action"].to(device)  # (B, action_dim) or (B, action_horizon, action_dim)
+
+        # Handle single-timestep actions by repeating across action_horizon
+        if action.ndim == 2:
+            # Shape: (B, action_dim) -> (B, action_horizon, action_dim)
+            action = action.unsqueeze(1).repeat(1, self.action_horizon, 1)
 
         batch_size = action.shape[0]
 
@@ -243,6 +249,10 @@ class DiffusionPolicyAdapter:
         obs = batch["observation"].to(device)
         action_gt = batch["action"].to(device)
 
+        # Handle single-timestep actions
+        if action_gt.ndim == 2:
+            action_gt = action_gt.unsqueeze(1).repeat(1, self.action_horizon, 1)
+
         batch_size = action_gt.shape[0]
 
         # Start from random noise
@@ -293,6 +303,7 @@ class DiffusionPolicyAdapter:
             shuffle=True,
             num_workers=num_workers,
             pin_memory=True,
+            collate_fn=collate_lerobot_batch,
         )
 
         eval_loader = None
@@ -303,6 +314,7 @@ class DiffusionPolicyAdapter:
                 shuffle=False,
                 num_workers=num_workers,
                 pin_memory=True,
+                collate_fn=collate_lerobot_batch,
             )
 
         return train_loader, eval_loader
