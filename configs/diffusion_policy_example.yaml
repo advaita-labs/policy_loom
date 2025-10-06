@@ -1,0 +1,283 @@
+# DiffusionPolicy Training Configuration Example
+# This file shows all available configuration options with explanations
+# Adapt this template for your specific robot learning task
+
+# ==============================================================================
+# MODEL CONFIGURATION
+# ==============================================================================
+model:
+  # Model type - must be "diffusion_policy" for this adapter
+  type: diffusion_policy
+
+  # Observation dimension (flattened)
+  # For state-only: this is your proprioceptive state dimension (e.g., 7 for joint positions)
+  # For vision: this would be the encoded image features dimension (e.g., 512 from ResNet)
+  # Example: 6 joint positions + gripper state = 7
+  obs_dim: 7
+
+  # Action dimension - number of action values per timestep
+  # Example: 6 DOF robot arm + 1 gripper = 7
+  action_dim: 7
+
+  # Number of past observations to condition on (observation history)
+  # Higher values give more temporal context but increase memory
+  # Typical range: 1-4
+  obs_horizon: 2
+
+  # Number of future actions to predict (action chunking)
+  # Predicting multiple future actions improves smoothness
+  # Typical range: 4-16
+  action_horizon: 8
+
+  # Hidden dimension for neural network layers
+  # Larger values increase model capacity but also memory/compute
+  # Typical range: 128-512
+  hidden_dim: 256
+
+  # Number of diffusion denoising steps during training and inference
+  # More steps = better quality but slower inference
+  # Typical range: 10-100
+  num_diffusion_steps: 100
+
+  # Noise schedule for diffusion process
+  # Options: "linear", "squaredcos_cap_v2" (recommended)
+  beta_schedule: squaredcos_cap_v2
+
+  # Camera names to use (if using vision)
+  # Leave empty [] for state-only training
+  # Example: ["wrist_camera", "third_person_camera"]
+  camera_names: []
+
+# ==============================================================================
+# TRAINING PARAMETERS
+# ==============================================================================
+training:
+  # Number of training epochs
+  # One epoch = one pass through entire dataset
+  epochs: 50
+
+  # Batch size for training
+  # Adjust based on GPU memory (smaller for MPS, larger for CUDA)
+  # Typical: 16-256 for CUDA, 4-32 for MPS
+  batch_size: 32
+
+  # Learning rate for AdamW optimizer
+  # Typical range: 1e-5 to 1e-3
+  learning_rate: 1e-4
+
+  # Weight decay for L2 regularization
+  # Helps prevent overfitting
+  # Typical range: 1e-6 to 1e-4
+  weight_decay: 1e-6
+
+  # Gradient clipping norm (0 = no clipping)
+  # Prevents exploding gradients
+  # Typical range: 0.5-10.0
+  gradient_clip_norm: 1.0
+
+  # Number of dataloader worker processes
+  # More workers = faster data loading but more memory
+  # Set to 0 for debugging, 2-8 for training
+  num_workers: 4
+
+  # Learning rate scheduler configuration
+  lr_scheduler:
+    # Scheduler type: "constant", "step", "cosine", "plateau"
+    type: cosine
+
+    # For "step" scheduler: reduce LR every N steps
+    step_size: null
+
+    # For "step" and "plateau": multiply LR by this factor
+    gamma: 0.1
+
+    # For "cosine": minimum learning rate
+    min_lr: 1e-6
+
+    # For "plateau": number of epochs with no improvement before reducing
+    patience: null
+
+# ==============================================================================
+# DATA CONFIGURATION
+# ==============================================================================
+# Choose ONE of the following data source configurations:
+
+# Option 1: LeRobot Dataset from HuggingFace Hub
+# ------------------------------------------------------------------------------
+data:
+  type: lerobot
+
+  # HuggingFace dataset repository ID
+  # Example: "lerobot/koch_test", "LBST/eval_t10_pick_and_place"
+  # Browse available datasets: https://huggingface.co/lerobot
+  dataset: "lerobot/koch_test"
+
+  # Dataset splits to use
+  train_split: train
+  eval_split: test  # Set to null if no eval split available
+
+  # Optional: local directory to cache downloaded dataset
+  # If null, uses default HuggingFace cache (~/.cache/huggingface)
+  local_dir: null
+
+# Option 2: MCAP Dataset (ROS2 bags)
+# ------------------------------------------------------------------------------
+# data:
+#   type: mcap
+#
+#   # Path to directory containing .mcap files
+#   # Can use glob patterns: "data/recordings/*.mcap"
+#   train_path: "data/train_recordings/*.mcap"
+#   eval_path: "data/eval_recordings/*.mcap"  # Optional
+#
+#   # ROS2 topic names to extract
+#   topics:
+#     # Camera image topics (list of camera names and topics)
+#     cameras:
+#       - name: wrist_camera
+#         topic: /camera/wrist/image_raw
+#       - name: overhead_camera
+#         topic: /camera/overhead/image_raw
+#
+#     # Proprioceptive state topic (joint positions, velocities, etc.)
+#     state_topic: /robot/joint_states
+#
+#     # Action topic (commanded joint positions/velocities)
+#     action_topic: /robot/action
+#
+#   # Image preprocessing
+#   image_size: [224, 224]  # Resize images to [height, width]
+#   normalize: true  # Normalize to [0, 1] or ImageNet stats
+
+# Option 3: MP4 Video Dataset
+# ------------------------------------------------------------------------------
+# data:
+#   type: mp4
+#
+#   # Directory structure:
+#   # train_path/
+#   #   episode_001/
+#   #     camera_front.mp4
+#   #     camera_wrist.mp4
+#   #     state.npy  (T, state_dim) - proprioceptive states
+#   #     action.npy  (T, action_dim) - actions
+#   #   episode_002/
+#   #     ...
+#
+#   train_path: "data/train_videos"
+#   eval_path: "data/eval_videos"  # Optional
+#
+#   # Camera video filenames (without extension)
+#   camera_names: ["camera_front", "camera_wrist"]
+#
+#   # Filenames for state and action arrays
+#   state_filename: "state.npy"  # Shape: (num_timesteps, state_dim)
+#   action_filename: "action.npy"  # Shape: (num_timesteps, action_dim)
+#
+#   # Video frame rate (fps) - must match action/state frequency
+#   fps: 30
+#
+#   # Image preprocessing
+#   image_size: [224, 224]
+#   normalize: true
+
+# ==============================================================================
+# CHECKPOINT CONFIGURATION
+# ==============================================================================
+checkpoints:
+  # Directory to save checkpoints
+  dir: ./checkpoints/diffusion_policy
+
+  # Save checkpoint every N training steps (null = disabled)
+  save_every_steps: 1000
+
+  # Save checkpoint every N epochs (null = disabled)
+  save_every_epochs: null
+
+  # Keep only top K checkpoints based on evaluation metric
+  # Older checkpoints are deleted (null = keep all)
+  keep_top_k: 3
+
+  # Always keep the last K checkpoints regardless of metric
+  # Useful for resuming training (null = don't keep last)
+  keep_last_k: 2
+
+  # Path to checkpoint to resume training from (null = start fresh)
+  resume_from: null
+
+# ==============================================================================
+# EVALUATION CONFIGURATION
+# ==============================================================================
+evaluation:
+  # Run evaluation every N training steps (null = disabled)
+  eval_every_steps: null
+
+  # Run evaluation every N epochs (null = disabled)
+  eval_every_epochs: 5
+
+  # Number of samples to use for evaluation (null = use all)
+  eval_samples: null
+
+# ==============================================================================
+# LOGGING CONFIGURATION
+# ==============================================================================
+logging:
+  # Log metrics every N training steps
+  log_every_steps: 10
+
+  # Directory for log files
+  log_dir: ./logs
+
+  # Weights & Biases (wandb) configuration
+  wandb:
+    # Enable W&B logging
+    enabled: false
+
+    # W&B project name
+    project: robot_learning
+
+    # Run name (null = auto-generated)
+    name: diffusion_policy_experiment
+
+    # W&B entity/team (null = use default)
+    entity: null
+
+    # Additional tags for organizing runs
+    tags: ["diffusion_policy", "robot_manipulation"]
+
+    # Additional notes about this run
+    notes: "Training DiffusionPolicy on koch dataset"
+
+# ==============================================================================
+# EXAMPLE CONFIGURATIONS FOR SPECIFIC SCENARIOS
+# ==============================================================================
+
+# Scenario 1: State-only (no vision), LeRobot dataset
+# ------------------------------------------------------------------------------
+# model:
+#   obs_dim: 6  # 6 joint positions
+#   action_dim: 6  # 6 joint velocities
+#   camera_names: []
+# data:
+#   type: lerobot
+#   dataset: "LBST/eval_t10_pick_and_place"
+
+# Scenario 2: Vision + State, MCAP dataset
+# ------------------------------------------------------------------------------
+# model:
+#   obs_dim: 512  # ResNet features
+#   action_dim: 7
+#   camera_names: ["wrist", "overhead"]
+# data:
+#   type: mcap
+#   train_path: "data/recordings/*.mcap"
+
+# Scenario 3: Multi-camera vision, MP4 dataset
+# ------------------------------------------------------------------------------
+# model:
+#   obs_dim: 1024  # Dual-camera features
+#   action_dim: 8
+#   camera_names: ["front", "wrist", "side"]
+# data:
+#   type: mp4
+#   train_path: "data/demonstrations"
