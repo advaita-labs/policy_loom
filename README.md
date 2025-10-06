@@ -4,19 +4,43 @@ Open-source toolkit for building, preprocessing, and training Vision-Language-Ac
 
 ## Installation
 
+### Base Installation
+
 ```bash
 # Clone repository
 git clone https://github.com/advaita-labs/policy_loom.git
 cd policy_loom
 
-# Install with uv (recommended)
+# Install base package
 uv sync
+```
 
-# Or with pip
-pip install -e .
+### Model-Specific Dependencies
 
-# Install with dev dependencies
+```bash
+# For DiffusionPolicy training
+uv sync --extra diffusion
+
+# For Pi0.5 training (⚠️ requires separate venv - see below)
+uv sync --extra pi05
+
+# For development
 uv sync --extra dev
+```
+
+### Pi0.5 Installation (Separate Environment)
+
+⚠️ **Important**: Pi0.5 requires a custom transformers branch that conflicts with other models.
+Install in a **separate virtual environment**:
+
+```bash
+# Create dedicated venv for pi0.5
+python -m venv venv-pi05
+source venv-pi05/bin/activate  # On Windows: venv-pi05\Scripts\activate
+
+# Install policy_loom with pi0.5 dependencies
+cd policy_loom
+uv sync --extra pi05
 ```
 
 ## Quick Start
