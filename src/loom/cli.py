@@ -1,0 +1,279 @@
+"""CLI for policy_loom using Typer.
+
+Provides commands for:
+- Training models
+- Preprocessing data
+- Running transformations
+- Evaluating models
+"""
+
+import logging
+from pathlib import Path
+from typing import Annotated, Any, Optional
+
+import torch
+import typer
+
+from loom.training import Trainer, TrainingConfig, list_adapters
+
+# Create Typer app
+app = typer.Typer(
+    name="loom",
+    help="Policy Loom - VLA model training toolkit",
+    add_completion=False,
+)
+
+logger = logging.getLogger(__name__)
+
+
+def version_callback(value: bool) -> None:
+    """Print version and exit."""
+    if value:
+        typer.echo("policy-loom version 0.1.0")
+        raise typer.Exit()
+
+
+@app.callback()
+def main(
+    version: Annotated[
+        Optional[bool],
+        typer.Option("--version", callback=version_callback, is_eager=True, help="Show version and exit"),
+    ] = None,
+) -> None:
+    """Policy Loom - VLA model training toolkit."""
+    pass
+
+
+@app.command()
+def train(
+    config_path: Annotated[Path, typer.Argument(help="Path to training config YAML file")],
+    output_dir: Annotated[Optional[Path], typer.Option(help="Override output directory for checkpoints/logs")] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable verbose logging")] = False,
+) -> None:
+    """Train a VLA model using the specified configuration.
+
+    Example:
+        loom train config.yaml
+        loom train config.yaml --output-dir ./runs/experiment1 --verbose
+    """
+    # Setup logging
+    log_level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
+
+    try:
+        # Validate config file exists
+        if not config_path.exists():
+            typer.echo(f"Error: Config file not found: {config_path}", err=True)
+            raise typer.Exit(1)
+
+        typer.echo(f"Loading configuration from {config_path}")
+
+        # Load config
+        config = TrainingConfig.from_yaml(config_path)
+
+        # Override output dir if specified
+        if output_dir:
+            config.checkpoints.dir = output_dir / "checkpoints"
+            config.logging.log_dir = output_dir / "logs"
+            typer.echo(f"Output directory: {output_dir}")
+
+        # Load data
+        typer.echo("Loading datasets...")
+        train_data_path = Path(str(config.data.get("train_path")))
+        eval_data_path = Path(str(config.data.get("eval_path"))) if config.data.get("eval_path") else None
+
+        if not train_data_path.exists():
+            typer.echo(f"Error: Training data not found: {train_data_path}", err=True)
+            raise typer.Exit(1)
+
+        # Load training data
+        train_data = torch.load(train_data_path)
+        train_dataset = _create_dataset(train_data)
+
+        # Load eval data if specified
+        eval_dataset = None
+        if eval_data_path and eval_data_path.exists():
+            eval_data = torch.load(eval_data_path)
+            eval_dataset = _create_dataset(eval_data)
+            typer.echo(f"Loaded {len(train_dataset)} training samples, {len(eval_dataset)} eval samples")
+        else:
+            typer.echo(f"Loaded {len(train_dataset)} training samples (no eval set)")
+
+        # Create trainer
+        typer.echo(f"Initializing trainer with model type: {config.model['type']}")
+        trainer = Trainer(config, train_dataset, eval_dataset)
+
+        # Start training
+        typer.echo("Starting training...")
+        trainer.train()
+
+        typer.echo("Training completed successfully!")
+
+    except Exception as e:
+        typer.echo(f"Error during training: {e}", err=True)
+        if verbose:
+            import traceback
+
+            traceback.print_exc()
+        raise typer.Exit(1) from e
+
+
+@app.command()
+def eval(
+    config_path: Annotated[Path, typer.Argument(help="Path to training config YAML file")],
+    checkpoint: Annotated[Path, typer.Option(help="Path to checkpoint file to evaluate")],
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable verbose logging")] = False,
+) -> None:
+    """Evaluate a trained model on the eval dataset.
+
+    Example:
+        loom eval config.yaml --checkpoint checkpoints/checkpoint_step_1000.pt
+    """
+    log_level = logging.DEBUG if verbose else logging.INFO
+    logging.basicConfig(level=log_level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+    try:
+        if not config_path.exists():
+            typer.echo(f"Error: Config file not found: {config_path}", err=True)
+            raise typer.Exit(1)
+
+        if not checkpoint.exists():
+            typer.echo(f"Error: Checkpoint not found: {checkpoint}", err=True)
+            raise typer.Exit(1)
+
+        typer.echo(f"Loading configuration from {config_path}")
+        config = TrainingConfig.from_yaml(config_path)
+
+        # Load eval data
+        eval_data_path = Path(str(config.data.get("eval_path")))
+        if not eval_data_path.exists():
+            typer.echo(f"Error: Eval data not found: {eval_data_path}", err=True)
+            raise typer.Exit(1)
+
+        typer.echo("Loading eval dataset...")
+        eval_data = torch.load(eval_data_path)
+        eval_dataset = _create_dataset(eval_data)
+
+        # Create dummy train dataset (not used for eval)
+        train_dataset = eval_dataset
+
+        typer.echo("Initializing trainer...")
+        trainer = Trainer(config, train_dataset, eval_dataset)
+
+        # Load checkpoint
+        typer.echo(f"Loading checkpoint from {checkpoint}")
+        trainer.checkpoint_manager.load(checkpoint, trainer.model)
+
+        # Run evaluation
+        typer.echo("Running evaluation...")
+        metrics = trainer._evaluate()
+
+        # Print results
+        typer.echo("\n" + "=" * 50)
+        typer.echo("Evaluation Results:")
+        typer.echo("=" * 50)
+        for key, value in metrics.items():
+            typer.echo(f"{key}: {value:.6f}")
+        typer.echo("=" * 50)
+
+    except Exception as e:
+        typer.echo(f"Error during evaluation: {e}", err=True)
+        if verbose:
+            import traceback
+
+            traceback.print_exc()
+        raise typer.Exit(1) from e
+
+
+@app.command()
+def preprocess(
+    config_path: Annotated[Path, typer.Argument(help="Path to preprocessing config YAML file")],
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable verbose logging")] = False,
+) -> None:
+    """Run preprocessing on raw data.
+
+    This command will be implemented to preprocess raw robot data
+    into the format expected by VLA models.
+
+    Example:
+        loom preprocess preprocess_config.yaml
+    """
+    typer.echo("Preprocessing command coming soon!", err=True)
+    typer.echo("This will preprocess raw robot data for model training.", err=True)
+    raise typer.Exit(1)
+
+
+@app.command()
+def transform(
+    config_path: Annotated[Path, typer.Argument(help="Path to transform config YAML file")],
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable verbose logging")] = False,
+) -> None:
+    """Run transformations on data.
+
+    This command will be implemented to run time/vision transforms
+    on preprocessed data.
+
+    Example:
+        loom transform transform_config.yaml
+    """
+    typer.echo("Transform command coming soon!", err=True)
+    typer.echo("This will apply transforms to preprocessed data.", err=True)
+    raise typer.Exit(1)
+
+
+@app.command(name="list-adapters")
+def list_adapters_command() -> None:
+    """List all available model adapters.
+
+    Shows which model types can be used in the config file.
+
+    Example:
+        loom list-adapters
+    """
+    adapters = list_adapters()
+
+    if not adapters:
+        typer.echo("No model adapters registered.")
+        return
+
+    typer.echo("Available model adapters:")
+    typer.echo("=" * 40)
+    for adapter_name in sorted(adapters):
+        typer.echo(f"  - {adapter_name}")
+    typer.echo("=" * 40)
+    typer.echo(f"\nTotal: {len(adapters)} adapter(s)")
+    typer.echo("\nUse these names in your config file under 'model.type'")
+
+
+def _create_dataset(data: dict[str, Any]) -> Any:
+    """Create a dataset from loaded data.
+
+    Args:
+        data: Dict with 'observation' and 'action' keys
+
+    Returns:
+        Dataset that yields dicts with observation and action
+    """
+
+    class DictDataset(torch.utils.data.Dataset):
+        def __init__(self, observations, actions):
+            self.observations = torch.tensor(observations, dtype=torch.float32)
+            self.actions = torch.tensor(actions, dtype=torch.float32)
+
+        def __len__(self):
+            return len(self.observations)
+
+        def __getitem__(self, idx):
+            return {
+                "observation": self.observations[idx],
+                "action": self.actions[idx],
+            }
+
+    return DictDataset(data["observation"], data["action"])
+
+
+if __name__ == "__main__":
+    app()
