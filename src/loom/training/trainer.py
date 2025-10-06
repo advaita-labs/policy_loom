@@ -277,11 +277,14 @@ class Trainer:
         """Setup training device.
 
         Returns:
-            Device for training (cuda or cpu)
+            Device for training (cuda, mps, or cpu)
         """
         if torch.cuda.is_available():
             device = torch.device("cuda")
             logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")
+            logger.info("Using Apple Silicon MPS")
         else:
             device = torch.device("cpu")
             logger.info("Using CPU")
