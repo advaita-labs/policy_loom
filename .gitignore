@@ -237,3 +237,5 @@ logs/
 
 # Pre-commit hooks cache
 .pre-commit-cache/
+
+checkpoints/
