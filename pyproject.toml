@@ -14,9 +14,20 @@ dependencies = [
     "torch>=2.0.0",
     "transformers>=4.30.0",
     "pillow>=10.0.0",
+    "pyyaml>=6.0",
+    "typer>=0.9.0",
 ]
 
 [project.optional-dependencies]
+# Training dependencies
+training = [
+    "diffusers>=0.11.1",
+    "wandb>=0.13.3",
+    "accelerate>=0.13.2",
+    "einops>=0.6.0",
+]
+
+# Development dependencies
 dev = [
     "black>=24.0.0",
     "isort>=5.13.0",
@@ -26,6 +37,14 @@ dev = [
     "pytest-cov>=6.0.0",
     "pre-commit>=4.0.0",
 ]
+
+# All optional features
+all = [
+    "policy-loom[training]",
+]
+
+[project.scripts]
+loom = "loom.cli:app"
 
 [build-system]
 requires = ["uv_build>=0.8.3,<0.9.0"]
@@ -77,3 +96,8 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "--cov=loom --cov-report=term-missing --cov-report=html"
+
+[dependency-groups]
+dev = [
+    "types-pyyaml>=6.0.12.20250915",
+]
