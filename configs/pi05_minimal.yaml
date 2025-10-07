@@ -12,7 +12,7 @@ model:
   type: pi05
 
   # OpenPI config (pi05_libero, pi05_droid, pi05_aloha, etc.)
-  config_name: pi05_base
+  config_name: pi05_libero
 
   # Model architecture (may be overridden by openpi config)
   action_dim: 7
