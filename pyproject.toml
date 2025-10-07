@@ -87,6 +87,7 @@ ignore = []
 
 [tool.mypy]
 python_version = "3.11"
+ignore_missing_imports = true  # Don't fail on missing external library stubs
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -100,6 +101,10 @@ warn_unused_ignores = true
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
+
+[[tool.mypy.overrides]]
+module = ["yaml", "yaml.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
