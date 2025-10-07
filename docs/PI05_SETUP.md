@@ -38,9 +38,12 @@ cd policy_loom
 
 # Install with pi05 extra (skip Git LFS files we don't need)
 GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
+
+# Install transformers_replace (required by openpi PyTorch models)
+cp -r .venv/lib/python3.*/site-packages/openpi/models_pytorch/transformers_replace/* .venv/lib/python3.*/site-packages/transformers/
 ```
 
-**Note:** We set `GIT_LFS_SKIP_SMUDGE=1` to skip downloading large test dataset files from the lerobot dependency. We only need the Python code, not the test data.
+**Note:** We set `GIT_LFS_SKIP_SMUDGE=1` to skip downloading large test dataset files from the lerobot dependency. openpi also requires patching transformers with custom modifications for Pi0.5 models.
 
 This installs:
 - Physical Intelligence's openpi package
