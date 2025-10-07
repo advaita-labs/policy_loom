@@ -187,22 +187,73 @@ class TrainingConfig:
         training_dict = config_dict.get("training", {}).copy()
         lr_scheduler_dict = training_dict.pop("lr_scheduler", {})
 
+        # Ensure numeric types are correctly converted (dataclasses don't enforce types)
+        if "warmup_steps" in lr_scheduler_dict:
+            lr_scheduler_dict["warmup_steps"] = int(lr_scheduler_dict["warmup_steps"])
+        if "min_lr" in lr_scheduler_dict:
+            lr_scheduler_dict["min_lr"] = float(lr_scheduler_dict["min_lr"])
+        if "step_size" in lr_scheduler_dict and lr_scheduler_dict["step_size"] is not None:
+            lr_scheduler_dict["step_size"] = int(lr_scheduler_dict["step_size"])
+        if "gamma" in lr_scheduler_dict:
+            lr_scheduler_dict["gamma"] = float(lr_scheduler_dict["gamma"])
+        if "patience" in lr_scheduler_dict:
+            lr_scheduler_dict["patience"] = int(lr_scheduler_dict["patience"])
+
+        # Ensure training params are correctly typed
+        if "epochs" in training_dict:
+            training_dict["epochs"] = int(training_dict["epochs"])
+        if "batch_size" in training_dict:
+            training_dict["batch_size"] = int(training_dict["batch_size"])
+        if "learning_rate" in training_dict:
+            training_dict["learning_rate"] = float(training_dict["learning_rate"])
+        if "weight_decay" in training_dict:
+            training_dict["weight_decay"] = float(training_dict["weight_decay"])
+        if "gradient_clip_norm" in training_dict:
+            training_dict["gradient_clip_norm"] = float(training_dict["gradient_clip_norm"])
+        if "num_workers" in training_dict:
+            training_dict["num_workers"] = int(training_dict["num_workers"])
+
         training_params = TrainingParams(
             **training_dict,
             lr_scheduler=LRSchedulerConfig(**lr_scheduler_dict),
         )
 
-        checkpoint_config = CheckpointConfig(**config_dict.get("checkpoints", {}))
+        # Ensure checkpoint config types are correct
+        checkpoint_dict = config_dict.get("checkpoints", {}).copy()
+        if "save_every_steps" in checkpoint_dict and checkpoint_dict["save_every_steps"] is not None:
+            checkpoint_dict["save_every_steps"] = int(checkpoint_dict["save_every_steps"])
+        if "save_every_epochs" in checkpoint_dict and checkpoint_dict["save_every_epochs"] is not None:
+            checkpoint_dict["save_every_epochs"] = int(checkpoint_dict["save_every_epochs"])
+        if "keep_top_k" in checkpoint_dict:
+            checkpoint_dict["keep_top_k"] = int(checkpoint_dict["keep_top_k"])
+        if "keep_last_k" in checkpoint_dict:
+            checkpoint_dict["keep_last_k"] = int(checkpoint_dict["keep_last_k"])
+
+        checkpoint_config = CheckpointConfig(**checkpoint_dict)
         # Convert string path to Path object
         if "dir" in config_dict.get("checkpoints", {}):
             checkpoint_config.dir = Path(checkpoint_config.dir)
         if checkpoint_config.resume_from is not None:
             checkpoint_config.resume_from = Path(checkpoint_config.resume_from)
 
-        eval_config = EvaluationConfig(**config_dict.get("evaluation", {}))
+        # Ensure evaluation config types are correct
+        eval_dict = config_dict.get("evaluation", {}).copy()
+        if "eval_every_steps" in eval_dict and eval_dict["eval_every_steps"] is not None:
+            eval_dict["eval_every_steps"] = int(eval_dict["eval_every_steps"])
+        if "eval_every_epochs" in eval_dict and eval_dict["eval_every_epochs"] is not None:
+            eval_dict["eval_every_epochs"] = int(eval_dict["eval_every_epochs"])
+        if "eval_batches" in eval_dict and eval_dict["eval_batches"] is not None:
+            eval_dict["eval_batches"] = int(eval_dict["eval_batches"])
+
+        eval_config = EvaluationConfig(**eval_dict)
+
+        # Ensure logging config types are correct
+        logging_dict = {k: v for k, v in config_dict.get("logging", {}).items() if k != "wandb"}
+        if "log_every_steps" in logging_dict:
+            logging_dict["log_every_steps"] = int(logging_dict["log_every_steps"])
 
         logging_config = LoggingConfig(
-            **{k: v for k, v in config_dict.get("logging", {}).items() if k != "wandb"},
+            **logging_dict,
             wandb=WandbConfig(**config_dict.get("logging", {}).get("wandb", {})),
         )
         if "log_dir" in config_dict.get("logging", {}):
