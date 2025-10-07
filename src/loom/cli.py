@@ -9,7 +9,7 @@ Provides commands for:
 
 import logging
 from pathlib import Path
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 
 import torch
 import typer
@@ -36,7 +36,7 @@ def version_callback(value: bool) -> None:
 @app.callback()
 def main(
     version: Annotated[
-        Optional[bool],
+        bool | None,
         typer.Option("--version", callback=version_callback, is_eager=True, help="Show version and exit"),
     ] = None,
 ) -> None:
@@ -47,7 +47,7 @@ def main(
 @app.command()
 def train(
     config_path: Annotated[Path, typer.Argument(help="Path to training config YAML file")],
-    output_dir: Annotated[Optional[Path], typer.Option(help="Override output directory for checkpoints/logs")] = None,
+    output_dir: Annotated[Path | None, typer.Option(help="Override output directory for checkpoints/logs")] = None,
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable verbose logging")] = False,
 ) -> None:
     """Train a VLA model using the specified configuration.
@@ -80,27 +80,59 @@ def train(
             config.logging.log_dir = output_dir / "logs"
             typer.echo(f"Output directory: {output_dir}")
 
-        # Load data
+        # Load data based on type
         typer.echo("Loading datasets...")
-        train_data_path = Path(str(config.data.get("train_path")))
-        eval_data_path = Path(str(config.data.get("eval_path"))) if config.data.get("eval_path") else None
+        data_type = config.data.get("type", "file")
 
-        if not train_data_path.exists():
-            typer.echo(f"Error: Training data not found: {train_data_path}", err=True)
-            raise typer.Exit(1)
+        if data_type == "lerobot":
+            # Load LeRobot dataset from HuggingFace
+            from loom.io.lerobot import LeRobotDatasetLoader
 
-        # Load training data
-        train_data = torch.load(train_data_path)
-        train_dataset = _create_dataset(train_data)
+            dataset_repo = config.data.get("dataset")
+            if not dataset_repo:
+                typer.echo("Error: 'dataset' field required for lerobot data type", err=True)
+                raise typer.Exit(1)
 
-        # Load eval data if specified
-        eval_dataset = None
-        if eval_data_path and eval_data_path.exists():
-            eval_data = torch.load(eval_data_path)
-            eval_dataset = _create_dataset(eval_data)
-            typer.echo(f"Loaded {len(train_dataset)} training samples, {len(eval_dataset)} eval samples")
+            train_split = config.data.get("train_split", "train")
+            eval_split = config.data.get("eval_split")
+            local_dir = Path(config.data["local_dir"]) if config.data.get("local_dir") else None
+
+            # Load training data
+            typer.echo(f"Loading LeRobot dataset: {dataset_repo} (split={train_split})")
+            train_loader = LeRobotDatasetLoader(dataset_repo, split=train_split, local_dir=local_dir)
+            train_dataset = train_loader.to_torch_dataset()
+
+            # Load eval data if specified
+            eval_dataset = None
+            if eval_split:
+                typer.echo(f"Loading eval dataset: {dataset_repo} (split={eval_split})")
+                eval_loader = LeRobotDatasetLoader(dataset_repo, split=eval_split, local_dir=local_dir)
+                eval_dataset = eval_loader.to_torch_dataset()
+                typer.echo(f"Loaded {len(train_dataset)} training samples, {len(eval_dataset)} eval samples")
+            else:
+                typer.echo(f"Loaded {len(train_dataset)} training samples (no eval set)")
+
         else:
-            typer.echo(f"Loaded {len(train_dataset)} training samples (no eval set)")
+            # Load from local files (legacy path-based loading)
+            train_data_path = Path(str(config.data.get("train_path")))
+            eval_data_path = Path(str(config.data.get("eval_path"))) if config.data.get("eval_path") else None
+
+            if not train_data_path.exists():
+                typer.echo(f"Error: Training data not found: {train_data_path}", err=True)
+                raise typer.Exit(1)
+
+            # Load training data
+            train_data = torch.load(train_data_path)
+            train_dataset = _create_dataset(train_data)
+
+            # Load eval data if specified
+            eval_dataset = None
+            if eval_data_path and eval_data_path.exists():
+                eval_data = torch.load(eval_data_path)
+                eval_dataset = _create_dataset(eval_data)
+                typer.echo(f"Loaded {len(train_dataset)} training samples, {len(eval_dataset)} eval samples")
+            else:
+                typer.echo(f"Loaded {len(train_dataset)} training samples (no eval set)")
 
         # Create trainer
         typer.echo(f"Initializing trainer with model type: {config.model['type']}")
@@ -259,14 +291,14 @@ def _create_dataset(data: dict[str, Any]) -> Any:
     """
 
     class DictDataset(torch.utils.data.Dataset):
-        def __init__(self, observations, actions):
+        def __init__(self, observations: Any, actions: Any) -> None:
             self.observations = torch.tensor(observations, dtype=torch.float32)
             self.actions = torch.tensor(actions, dtype=torch.float32)
 
-        def __len__(self):
+        def __len__(self) -> int:
             return len(self.observations)
 
-        def __getitem__(self, idx):
+        def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
             return {
                 "observation": self.observations[idx],
                 "action": self.actions[idx],
