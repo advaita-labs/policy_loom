@@ -6,7 +6,7 @@ readme = "README.md"
 authors = [
     { name = "Gourav", email = "gkshindia@gmail.com" }
 ]
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
@@ -29,7 +29,7 @@ diffusion = [
 ]
 
 # Pi0.5 using Physical Intelligence's official openpi package
-# Install in separate venv: python3.11 -m venv venv-pi05 && source venv-pi05/bin/activate && GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
+# Install with: GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
 pi05 = [
     "openpi @ git+https://github.com/Physical-Intelligence/openpi.git",
     "datasets>=2.0.0",  # For LeRobot format data loading only
@@ -48,7 +48,7 @@ dev = [
     "pre-commit>=4.0.0",
 ]
 
-# All optional features (pi05 requires separate venv due to conflicts)
+# All optional features
 all = [
     "policy-loom[diffusion]",
 ]
@@ -62,7 +62,7 @@ build-backend = "uv_build"
 
 [tool.black]
 line-length = 120
-target-version = ["py310"]
+target-version = ["py311"]
 
 [tool.isort]
 profile = "black"
@@ -70,7 +70,7 @@ line_length = 120
 
 [tool.ruff]
 line-length = 120
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = [
@@ -85,7 +85,7 @@ select = [
 ignore = []
 
 [tool.mypy]
-python_version = "3.10"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
