@@ -47,9 +47,10 @@ class Pi05Adapter:
         ```yaml
         model:
           type: pi05
+          config_name: pi05_libero  # openpi config: pi05_libero, pi05_droid, pi05_aloha, etc.
           pretrained_path: null  # Or path/URL to openpi checkpoint
-          action_dim: 7
-          action_horizon: 10
+          action_dim: 7  # May be overridden by openpi config
+          action_horizon: 10  # May be overridden by openpi config
           use_lora: false
           lora_rank: 8
           freeze_backbone: false
@@ -58,9 +59,10 @@ class Pi05Adapter:
     Args:
         config: Model configuration dict with keys:
             - type: "pi05"
+            - config_name: openpi config name (default: "pi05_libero")
             - pretrained_path: Path to openpi checkpoint (optional)
-            - action_dim: Action space dimension
-            - action_horizon: Number of future actions to predict
+            - action_dim: Action space dimension (may be overridden by openpi config)
+            - action_horizon: Number of future actions to predict (may be overridden by openpi config)
             - use_lora: Whether to use LoRA fine-tuning
             - lora_rank: LoRA rank (if use_lora=True)
             - freeze_backbone: Whether to freeze vision/language backbone
@@ -109,10 +111,10 @@ class Pi05Adapter:
             ValueError: If model creation fails
         """
         try:
-            # Import openpi modules
-            from openpi.models.pi0 import Pi0Config, create_pi0_model
-            from openpi.policies.policy_config import create_trained_policy
-            from openpi.shared.download import maybe_download
+            # Import openpi modules (correct API for Pi0.5)
+            from openpi.models import model as openpi_model
+            from openpi.shared import download
+            from openpi.training import config as openpi_config
         except ImportError as e:
             raise ImportError(
                 f"Failed to import openpi modules: {e}\n" "Ensure openpi is installed: uv sync --extra pi05"
@@ -125,15 +127,18 @@ class Pi05Adapter:
             try:
                 # Download checkpoint if it's a GCS URL
                 if self.pretrained_path.startswith("gs://"):
-                    checkpoint_dir = maybe_download(self.pretrained_path)
+                    checkpoint_dir = download.maybe_download(self.pretrained_path)
                 else:
                     checkpoint_dir = Path(self.pretrained_path)
 
-                # Load trained policy
-                model = create_trained_policy(
-                    checkpoint_dir=checkpoint_dir,
-                    pytorch_device="cuda" if torch.cuda.is_available() else "cpu",
-                )
+                # Get config from checkpoint (default to pi05_base)
+                # User can specify config name in pretrained_path like "pi05_droid" or "pi05_aloha"
+                config_name = self.config.get("config_name", "pi05_base")
+                pi05_config = openpi_config.get_config(config_name)
+
+                # Load model parameters
+                params = openpi_model.restore_params(checkpoint_dir / "params")
+                model = pi05_config.model.load(params)
 
                 logger.info(f"Successfully loaded checkpoint from {checkpoint_dir}")
 
@@ -141,18 +146,22 @@ class Pi05Adapter:
                 raise ValueError(f"Failed to load checkpoint from {self.pretrained_path}: {e}") from e
 
         else:
-            # Create model from scratch
+            # Create model from scratch using default Pi0.5 config
             logger.info("Creating Pi0.5 model from scratch")
 
             try:
-                # Create model config
-                model_config = Pi0Config(
-                    action_dim=self.action_dim,
-                    action_horizon=self.action_horizon,
+                # Get a default Pi0.5 config (use libero as base)
+                config_name = self.config.get("config_name", "pi05_libero")
+                pi05_config = openpi_config.get_config(config_name)
+
+                # Customize action dimensions if needed
+                # Note: openpi configs may have fixed architectures
+                logger.warning(
+                    f"Using openpi config '{config_name}'. " f"Config action_dim/horizon may override user settings."
                 )
 
-                # Create model
-                model = create_pi0_model(model_config)
+                # Initialize model with random parameters
+                model = pi05_config.model.init()
 
                 logger.info("Successfully created Pi0.5 model from scratch")
 
