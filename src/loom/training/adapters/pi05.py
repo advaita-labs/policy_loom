@@ -150,6 +150,8 @@ class Pi05Adapter:
             logger.info("Creating Pi0.5 model from scratch")
 
             try:
+                import jax
+
                 # Get a default Pi0.5 config (use libero as base)
                 config_name = self.config.get("config_name", "pi05_libero")
                 pi05_config = openpi_config.get_config(config_name)
@@ -160,8 +162,10 @@ class Pi05Adapter:
                     f"Using openpi config '{config_name}'. " f"Config action_dim/horizon may override user settings."
                 )
 
-                # Initialize model with random parameters
-                model = pi05_config.model.init()
+                # Initialize model with random parameters using JAX
+                rng = jax.random.PRNGKey(0)  # Use seed 0 for reproducibility
+                model_rng, rng = jax.random.split(rng)
+                model = pi05_config.model.create(model_rng)
 
                 logger.info("Successfully created Pi0.5 model from scratch")
 
