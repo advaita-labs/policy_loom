@@ -2,7 +2,6 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 from loom.core.types import Sample
@@ -68,84 +67,6 @@ class Transform(ABC):
 
         Raises:
             ValueError: If sample cannot be transformed
-        """
-        ...
-
-
-class Writer(ABC):
-    """Abstract base class for writing processed data.
-
-    A Writer is responsible for:
-    - Creating output directories/files
-    - Writing samples to disk in the target format
-    - Ensuring atomic writes and proper cleanup
-    - Generating manifests/metadata
-    """
-
-    @abstractmethod
-    def write(self, sample: Sample) -> None:
-        """Write a single sample to the output.
-
-        Args:
-            sample: Sample to write
-
-        Raises:
-            IOError: If write fails
-        """
-        ...
-
-    @abstractmethod
-    def close(self) -> None:
-        """Finalize writes and release resources.
-
-        This should:
-        - Flush any buffered data
-        - Write manifests/metadata
-        - Close file handles
-        - Perform atomic renames if using temp files
-        """
-        ...
-
-    def __enter__(self) -> "Writer":
-        """Context manager entry."""
-        return self
-
-    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
-        """Context manager exit."""
-        self.close()
-
-
-class Exporter(ABC):
-    """Abstract base class for export format handlers.
-
-    An Exporter defines:
-    - How to map canonical Sample → target schema
-    - Directory layout conventions
-    - File format specifications
-    """
-
-    @abstractmethod
-    def create_writer(self, output_path: Path, **kwargs: Any) -> Writer:
-        """Create a writer for this export format.
-
-        Args:
-            output_path: Root directory for exported data
-            **kwargs: Format-specific configuration
-
-        Returns:
-            A Writer instance configured for this export format
-        """
-        ...
-
-    @abstractmethod
-    def validate_output(self, output_path: Path) -> bool:
-        """Validate that exported data conforms to the schema.
-
-        Args:
-            output_path: Root directory of exported data
-
-        Returns:
-            True if valid, False otherwise
         """
         ...
 

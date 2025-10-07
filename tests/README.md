@@ -8,18 +8,21 @@ Test suite for `policy_loom`. Follows Test-Driven Development (TDD) principles.
 
 ```
 tests/
-├── ingest/              # Tests for data readers (mp4, mcap)
-│   ├── test_mp4.py
-│   └── test_mcap.py
-├── transforms/          # Tests for sample transforms
-│   ├── test_vision.py
-│   └── test_time.py
-├── export_openpi/       # Tests for OpenPI writer
-│   └── test_writer.py
-├── goldens/             # Golden outputs for regression tests
-│   ├── sample_episode/
-│   └── expected_outputs/
-└── test_core.py         # Tests for core types and ports
+├── test_core.py           # Core types (Sample, CameraImage)
+├── test_io.py             # Data readers (MP4, MCAP)
+├── test_pipeline.py       # Stream merging and synchronization
+├── test_synchronized.py   # Synchronized video+MCAP reader
+├── preprocessing/         # Preprocessor tests (SmolVLA, DiffusionPolicy)
+│   ├── test_smolvla.py
+│   └── test_diffusion_policy.py
+├── training/              # Training infrastructure tests
+│   ├── test_adapter.py
+│   ├── test_config.py
+│   ├── test_trainer.py
+│   └── adapters/
+│       └── test_diffusion_policy.py
+└── cli/                   # CLI tests
+    └── test_cli.py
 ```
 
 ## Running Tests
@@ -41,13 +44,13 @@ uv run pytest -v
 
 ```bash
 # Test a module
-uv run pytest tests/ingest/
+uv run pytest tests/training/
 
 # Test a file
-uv run pytest tests/ingest/test_mp4.py
+uv run pytest tests/test_io.py
 
 # Test a function
-uv run pytest tests/ingest/test_mp4.py::test_read_frames
+uv run pytest tests/test_io.py::test_mp4_reader
 ```
 
 ## Writing Tests
@@ -90,22 +93,19 @@ def test_mp4_reader(sample_video):
     assert len(samples) > 0
 ```
 
-### Golden Tests
+### Regression Tests
 
-For outputs that should remain consistent:
+Test that model outputs remain consistent:
 
 ```python
-def test_openpi_writer_golden(tmp_path):
-    """Test OpenPI writer produces expected output."""
-    # Write samples
-    writer = OpenPIWriter(tmp_path / "output")
-    for sample in generate_test_samples():
-        writer.write(sample)
-    writer.close()
+def test_preprocessor_output(sample_data):
+    """Test preprocessor produces consistent output."""
+    preprocessor = DiffusionPolicyPreprocessor(config)
+    output = preprocessor.preprocess_sample(sample_data)
 
-    # Compare with golden
-    expected = Path("tests/goldens/expected_episode")
-    assert_directories_equal(tmp_path / "output", expected)
+    # Verify output shape and values
+    assert output.state.shape == (obs_horizon, state_dim)
+    assert output.action.shape == (action_horizon, action_dim)
 ```
 
 ## Test Categories
@@ -114,19 +114,19 @@ def test_openpi_writer_golden(tmp_path):
 
 Test individual functions/classes in isolation.
 
-**Example**: Test `Resize` transform with known inputs/outputs.
+**Example**: Test `MP4Reader` with known inputs/outputs.
 
 ### Integration Tests
 
 Test multiple components working together.
 
-**Example**: Test full pipeline (read → transform → write).
+**Example**: Test full training pipeline (data loading → preprocessing → training).
 
 ### Regression Tests
 
 Use golden outputs to detect unintended changes.
 
-**Example**: Compare writer output with stored golden files.
+**Example**: Compare preprocessor output with expected values.
 
 ## Mocking
 

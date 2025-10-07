@@ -1,67 +1,35 @@
-# Example configuration for preprocessing MCAP/ROS bags to OpenPI format
-# Usage: uv run python -m loom.runners.preprocess --config configs/preprocess_mcap_to_openpi.yaml
+# NOTE: This config file represents the intended API design for a future
+# preprocessing pipeline feature. The export functionality is not yet implemented.
+#
+# For actual usage, load datasets directly from LeRobot:
+# from loom.io.lerobot import LeRobotDataset
+# dataset = LeRobotDataset("lerobot/your_dataset")
+#
+# Then use the training pipeline:
+# See examples in scripts/train_diffusion_policy.py or scripts/train_pi05.py
 
-input:
-  type: mcap
-  path: "./data/recording.mcap"
-
-  # Topic mapping: map ROS topics to Sample fields
-  topics:
-    image: "/camera/color/image_raw"
-    proprio: "/joint_states"
-    action: "/action_commands"
-
-  # Synchronization settings
-  time_tolerance_ms: 50  # Max time difference for message sync
-  required_topics:       # All topics must be present
-    - image
-    - proprio
-    - action
-  queue_size: 10         # Buffer size per topic
-
-  # Optional: field extraction for joint_states
-  proprio_fields:
-    - "joint_0"
-    - "joint_1"
-    - "joint_2"
-    - "joint_3"
-    - "joint_4"
-    - "joint_5"
-
-  action_fields:
-    - "dx"
-    - "dy"
-    - "dz"
-    - "droll"
-    - "dpitch"
-    - "dyaw"
-    - "gripper"
-
-transforms:
-  # Temporal resampling
-  - type: resample_fps
-    target_fps: 10
-
-  # Vision transforms
-  - type: resize
-    height: 224
-    width: 224
-
-  - type: normalize
-    preset: imagenet
-
-output:
-  type: openpi
-  path: "./output/recording_processed"
-  overwrite: false
-  validate: true
-
-metadata:
-  robot_type: "franka_panda"
-  task: "pick_and_place"
-  source: "teleop"
-  description: "MCAP recording from robot teleoperation"
-
-logging:
-  level: INFO
-  file: "./logs/preprocess_mcap.log"
+# input:
+#   type: mcap
+#   path: "./data/recording.mcap"
+#   topics:
+#     image: "/camera/color/image_raw"
+#     proprio: "/joint_states"
+#     action: "/action_commands"
+#
+# transforms:
+#   - type: resample_fps
+#     target_fps: 10
+#   - type: resize
+#     height: 224
+#     width: 224
+#
+# output:
+#   type: openpi
+#   path: "./output/recording_processed"
+#
+# metadata:
+#   robot_type: "franka_panda"
+#   task: "pick_and_place"
+#
+# logging:
+#   level: INFO

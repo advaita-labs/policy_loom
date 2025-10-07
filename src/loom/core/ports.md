@@ -70,77 +70,20 @@ class Transform(ABC):
 - **Deterministic**: Same input → same output (no randomness unless seeded)
 - **Fast**: Avoid I/O, heavy computation (for per-sample transforms)
 
-**Example Implementations**:
-- `loom.transforms.vision.Resize` - resize images
-- `loom.transforms.time.ResampleFPS` - temporal resampling
-- `loom.transforms.vision.Normalize` - normalize pixel values
-
----
-
-## Writer
-
-**Purpose**: Write a stream of `Sample` objects to disk in a specific format.
-
-**Contract**:
+**Example**: Implement custom transforms by subclassing Transform
 ```python
-class Writer(ABC):
-    def write(self, sample: Sample) -> None:
-        """Write a single sample."""
-        ...
+from loom.core import Transform, Sample
+import cv2
 
-    def close(self) -> None:
-        """Finalize writes, flush buffers, write manifest."""
-        ...
-```
+class ResizeTransform(Transform):
+    def __init__(self, height: int, width: int):
+        self.height = height
+        self.width = width
 
-**Responsibilities**:
-- Create output directory structure
-- Write samples to appropriate files (parquet, mp4, csv, etc.)
-- Buffer writes for efficiency (flush in `close()`)
-- Write a **manifest** with metadata (versions, config, stats)
-- Use **atomic writes** (write to temp, rename on success)
-- Handle write failures gracefully (log, skip, or abort)
-
-**Lifecycle**:
-1. `__init__` - set up paths, create temp directories
-2. `write(sample)` - called once per sample (may buffer)
-3. `close()` - flush buffers, write manifest, rename temp → final
-
-**Example Implementations**:
-- `loom.export.openpi.OpenPIWriter` - writes OpenPI format
-- Generic writers in `loom.write.*`
-
----
-
-## Exporter (Optional)
-
-**Purpose**: Encapsulate format-specific logic (schema, layout, validation).
-
-**Contract**:
-```python
-class Exporter(ABC):
-    def create_writer(self, output_path: Path, **kwargs) -> Writer:
-        """Factory for creating a Writer."""
-        ...
-
-    def validate_output(self, output_path: Path) -> bool:
-        """Validate output conforms to schema."""
-        ...
-```
-
-**When to Use**:
-- For well-defined export formats (OpenPI, RLDS, etc.)
-- To group related schema/layout/validation logic
-- To provide a stable public API for a format
-
-**Example**:
-```python
-exporter = OpenPIExporter()
-writer = exporter.create_writer(Path("./out"), fps=10)
-for sample in reader.read():
-    writer.write(sample)
-writer.close()
-exporter.validate_output(Path("./out"))
+    def __call__(self, sample: Sample) -> Sample:
+        for camera in sample.cameras:
+            camera.image = cv2.resize(camera.image, (self.width, self.height))
+        return sample
 ```
 
 ---
@@ -159,25 +102,31 @@ exporter.validate_output(Path("./out"))
 
 ```python
 from loom.io.mp4 import MP4Reader
-from loom.transforms.vision import Resize, Normalize
-from loom.transforms.time import ResampleFPS
-from loom.export.openpi import OpenPIWriter
+from loom.core import Transform, Sample
+
+# Implement custom transforms
+class ResizeTransform(Transform):
+    def __init__(self, height: int, width: int):
+        self.height = height
+        self.width = width
+
+    def __call__(self, sample: Sample) -> Sample:
+        # Your resize logic here
+        return sample
 
 # Build a pipeline
-with MP4Reader("input.mp4") as reader, \
-     OpenPIWriter("output/") as writer:
-
+with MP4Reader("input.mp4") as reader:
     # Compose transforms
     pipeline = [
-        ResampleFPS(target_fps=10),
-        Resize(height=224, width=224),
-        Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ResizeTransform(height=224, width=224),
+        # Add more custom transforms here
     ]
 
     for sample in reader.read():
         for transform in pipeline:
             sample = transform(sample)
-        writer.write(sample)
+        # Process the transformed sample
+        print(f"Processed frame at {sample.timestamp}s")
 ```
 
 Clean, composable, testable. That's the goal.

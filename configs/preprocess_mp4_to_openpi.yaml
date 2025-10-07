@@ -1,46 +1,36 @@
-# Example configuration for preprocessing MP4 video to OpenPI format
-# Usage: uv run python -m loom.runners.preprocess --config configs/preprocess_mp4_to_openpi.yaml
+# NOTE: This config file represents the intended API design for a future
+# preprocessing pipeline feature. The transforms and export functionality
+# are not yet implemented.
+#
+# For actual usage, load datasets directly from LeRobot:
+# from loom.io.lerobot import LeRobotDataset
+# dataset = LeRobotDataset("lerobot/your_dataset")
+#
+# Then use the training pipeline:
+# See examples in scripts/train_diffusion_policy.py or scripts/train_pi05.py
 
-input:
-  type: mp4
-  path: "./data/demo.mp4"
-  # Optional: original fps (auto-detected if not specified)
-  # fps: 30
-
-transforms:
-  # Resample to target FPS (reduces data size)
-  - type: resample_fps
-    target_fps: 10
-    method: nearest  # nearest, interpolate, drop, duplicate
-
-  # Resize frames to standard resolution for VLA models
-  - type: resize
-    height: 224
-    width: 224
-    interpolation: bilinear  # bilinear, nearest, bicubic
-
-  # Normalize pixel values for neural network input
-  - type: normalize
-    preset: imagenet  # Use ImageNet mean/std
-    # Alternatively, specify custom mean/std:
-    # mean: [0.485, 0.456, 0.406]
-    # std: [0.229, 0.224, 0.225]
-    # scale: 255.0
-
-output:
-  type: openpi
-  path: "./output/demo_processed"
-  overwrite: false  # Fail if output already exists
-  validate: true    # Validate output after writing
-
-# Optional metadata to include in manifest
-metadata:
-  robot_type: "simulated"
-  task: "demonstration"
-  source: "video"
-  description: "Example MP4 video preprocessing"
-
-# Logging configuration
-logging:
-  level: INFO  # DEBUG, INFO, WARNING, ERROR
-  file: "./logs/preprocess_mp4.log"
+# input:
+#   type: mp4
+#   path: "./data/demo.mp4"
+#
+# transforms:
+#   - type: resample_fps
+#     target_fps: 10
+#
+#   - type: resize
+#     height: 224
+#     width: 224
+#
+#   - type: normalize
+#     preset: imagenet
+#
+# output:
+#   type: openpi
+#   path: "./output/demo_processed"
+#
+# metadata:
+#   robot_type: "simulated"
+#   task: "demonstration"
+#
+# logging:
+#   level: INFO

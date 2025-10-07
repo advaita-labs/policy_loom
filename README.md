@@ -85,10 +85,8 @@ policy_loom/
 │   │   │   ├── mcap/         # Robot telemetry reader (MCAPReader)
 │   │   │   └── synchronized.py  # Synchronized video+MCAP reader
 │   │   ├── pipeline/         # Data merging and processing (merge_streams)
-│   │   ├── transforms/       # Data transformations (vision, time)
-│   │   ├── export/           # Export to training formats (OpenPI, etc.)
-│   │   ├── write/            # Data writers
-│   │   ├── runners/          # High-level pipeline runners
+│   │   ├── preprocessing/    # Model-specific preprocessing
+│   │   ├── training/         # Training adapters and utilities
 │   │   └── observability/    # Logging and monitoring
 │   └── policy_loom/          # Distribution package (placeholder)
 ├── tests/                    # Test suite
@@ -130,12 +128,12 @@ Apply transforms to samples:
 - Vision transforms: resize, normalize, augment
 - Time transforms: resampling, filtering
 
-### 4. Export (Writers)
+### 4. Preprocessing (Model-Specific)
 
-Export processed data to training formats:
-- OpenPI format (Parquet tables)
-- HDF5
-- Custom formats
+Convert samples to model input format:
+- Vision preprocessing: resize, normalize, tokenize
+- Action space handling: normalization, clipping
+- Batching and collation for PyTorch DataLoader
 
 ## Design Principles
 
@@ -144,8 +142,7 @@ Export processed data to training formats:
 Core abstractions are defined as protocols:
 - **Reader**: Input data sources
 - **Transform**: Stateless data transformations
-- **Writer**: Output data sinks
-- **Exporter**: Format-specific exporters
+- **Preprocessor**: Model-specific preprocessing and batching
 
 This allows easy extension without modifying core logic.
 

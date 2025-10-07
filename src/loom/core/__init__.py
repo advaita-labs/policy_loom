@@ -4,7 +4,7 @@ This module defines the stable contracts that all pipeline components use.
 No heavy dependencies should be added here.
 """
 
-from loom.core.ports import Exporter, Reader, Transform, Writer
+from loom.core.ports import Reader, Transform
 from loom.core.types import CameraImage, Sample
 
-__all__ = ["Sample", "CameraImage", "Reader", "Transform", "Writer", "Exporter"]
+__all__ = ["Sample", "CameraImage", "Reader", "Transform"]

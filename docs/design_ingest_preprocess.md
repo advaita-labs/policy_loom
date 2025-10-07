@@ -86,12 +86,12 @@ Batching happens at training time (PyTorch `DataLoader`).
        │
        ▼
 ┌──────────────┐
-│ Writer       │  Writes to target format
+│ Preprocessor │  Model-specific preprocessing
 └──────┬───────┘
        │
        ▼
 ┌──────────────┐
-│ Output       │  (OpenPI, RLDS, ...)
+│ DataLoader   │  Batching for training
 └──────────────┘
 ```
 
@@ -151,28 +151,31 @@ class Transform(ABC):
 
 **Key property**: Stateless (no memory between calls).
 
-#### Writer (Export)
+#### Preprocessor (Model-Specific)
 
 ```python
-class Writer(ABC):
+class Preprocessor(ABC, Generic[TInput, TBatchInput]):
     @abstractmethod
-    def write(self, sample: Sample) -> None:
+    def preprocess_sample(self, sample: Sample) -> TInput:
+        """Convert a single Sample to model input format (unbatched)."""
         ...
 
     @abstractmethod
-    def close(self) -> None:
+    def collate_fn(self, batch: list[TInput]) -> TBatchInput:
+        """Collate list of preprocessed samples into batched model input."""
         ...
 ```
 
 **Implementations**:
-- `OpenPIWriter`: OpenPI format
-- `RLDSWriter`: TensorFlow RLDS (future)
+- `SmolVLAPreprocessor`: SmolVLA model
+- `DiffusionPolicyPreprocessor`: Diffusion Policy
+- `Pi05Preprocessor`: Physical Intelligence Pi0.5 model
 
 **Responsibilities**:
-- Create output directory structure
-- Buffer samples for efficient I/O
-- Write manifest with metadata
-- Ensure atomic writes (temp → rename)
+- Convert Sample to model input format
+- Handle tokenization, normalization
+- Batching and collation for DataLoader
+- Manage model-specific state (tokenizers, normalization stats)
 
 ---
 
@@ -262,16 +265,9 @@ Use functional-style transforms like `samples.map(resize).filter(predicate)`.
 
 ### Adding a New Transform
 
-1. Subclass `Transform`
+1. Subclass `Transform` from `loom.core.ports`
 2. Implement `__call__(sample: Sample) -> Sample`
-3. Add to `transforms/CATALOG.md`
-4. Add tests
-
-### Adding a New Export Format
-
-1. Subclass `Writer` (or `Exporter`)
-2. Implement `write(sample)` and `close()`
-3. Document schema and layout
+3. Add tests in `tests/`
 4. Add validation
 
 ---
