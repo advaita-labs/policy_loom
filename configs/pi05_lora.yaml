@@ -1,0 +1,73 @@
+# Pi0.5 Configuration with LoRA Fine-Tuning
+# Fine-tune a pretrained Pi0.5 checkpoint using LoRA
+#
+# Usage:
+#   1. Setup environment:
+#      python3.11 -m venv venv-pi05
+#      source venv-pi05/bin/activate
+#      uv sync --extra pi05
+#
+#   2. Train:
+#      loom train configs/pi05_lora.yaml
+
+model:
+  type: pi05
+
+  # Model architecture
+  action_dim: 7
+  action_horizon: 10
+  image_size: [224, 224]
+
+  # Load from pretrained checkpoint
+  pretrained_path: "gs://openpi-assets/checkpoints/pi05_base"  # Or local path
+
+  # LoRA fine-tuning (efficient, low memory)
+  use_lora: true
+  lora_rank: 16  # Higher rank = more capacity but more memory
+  freeze_backbone: true  # Freeze vision/language backbone
+
+  # Task-specific prompt
+  default_prompt: "Pick and place the object"
+
+training:
+  epochs: 20  # Fewer epochs for fine-tuning
+  batch_size: 16  # Can use larger batch with LoRA
+  learning_rate: 5e-5  # Lower LR for fine-tuning
+  weight_decay: 1e-4
+  gradient_clip_norm: 1.0
+  num_workers: 4
+
+  lr_scheduler:
+    type: cosine
+    warmup_steps: 100
+    min_lr: 1e-6
+
+data:
+  type: lerobot
+  dataset: "lerobot/aloha_sim_insertion_human"  # Your custom dataset
+  train_split: train
+  eval_split: test
+  local_dir: ./data/cache
+
+checkpoints:
+  dir: ./checkpoints/pi05_lora
+  save_every_steps: 500
+  save_every_epochs: null
+  keep_top_k: 3
+  keep_last_k: 2
+  resume_from: null
+
+evaluation:
+  eval_every_steps: null
+  eval_every_epochs: 2  # More frequent evaluation
+
+logging:
+  log_every_steps: 10
+  log_dir: ./logs/pi05_lora
+  wandb:
+    enabled: true
+    project: robot_learning
+    name: pi05_lora_finetune
+    entity: null
+    tags: ["pi05", "lora", "finetune"]
+    notes: "LoRA fine-tuning of Pi0.5 on custom dataset"
