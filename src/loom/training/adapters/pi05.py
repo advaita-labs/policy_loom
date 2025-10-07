@@ -122,15 +122,16 @@ class Pi05Adapter:
 
         # Get config
         config_name = self.config.get("config_name", "pi05_libero")
-        pi05_config = openpi_config.get_config(config_name)
+        train_config = openpi_config.get_config(config_name)
 
         logger.info(f"Using openpi config: {config_name}")
         logger.warning(
             "Config action_dim/horizon from openpi may override user settings. " "Check config for actual values."
         )
 
-        # Create PyTorch model
-        model = PI0Pytorch(pi05_config)
+        # Create PyTorch model using the model config
+        model_config = train_config.model
+        model = PI0Pytorch(model_config)
         logger.info("Created Pi0.5 PyTorch model")
 
         # Load from checkpoint if provided
