@@ -8,5 +8,5 @@ try:
 
     __all__ = ["DiffusionPolicyAdapter", "Pi05Adapter"]
 except ImportError:
-    # Pi0.5 dependencies not installed
+    # Pi0.5 dependencies not installed (requires separate venv)
     __all__ = ["DiffusionPolicyAdapter"]
