@@ -20,6 +20,40 @@ from torch.utils.data import DataLoader, Dataset
 
 from loom.training.adapter import register_adapter
 
+
+class JAXModelWrapper(nn.Module):
+    """Wrapper to make JAX models compatible with PyTorch trainer.
+
+    JAX models don't have .to() or .parameters() methods, so we wrap them
+    to provide a PyTorch-compatible interface.
+    """
+
+    def __init__(self, jax_model: Any):
+        super().__init__()
+        self.jax_model = jax_model
+        self._device = torch.device("cpu")
+
+    def to(self, device: torch.device) -> "JAXModelWrapper":
+        """Mock .to() method for device placement.
+
+        JAX handles device placement differently, so this is a no-op.
+        """
+        self._device = device
+        return self
+
+    def parameters(self) -> list:
+        """Return empty list - JAX models manage params differently."""
+        return []
+
+    def forward(self, *args: Any, **kwargs: Any) -> Any:
+        """Forward pass through JAX model."""
+        return self.jax_model(*args, **kwargs)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        """Make callable like JAX models."""
+        return self.jax_model(*args, **kwargs)
+
+
 if TYPE_CHECKING:
     from loom.training.transforms.openpi_transform import OpenPITransform
 
@@ -182,7 +216,11 @@ class Pi05Adapter:
             logger.info("Freezing vision/language backbone")
             self._freeze_backbone(model)
 
-        return model
+        # Wrap JAX model for PyTorch trainer compatibility
+        wrapped_model = JAXModelWrapper(model)
+        logger.info("Wrapped JAX model for PyTorch trainer compatibility")
+
+        return wrapped_model
 
     def _apply_lora(self, model: nn.Module) -> nn.Module:
         """Apply LoRA to model.
