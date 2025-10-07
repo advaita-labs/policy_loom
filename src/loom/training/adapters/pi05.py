@@ -115,7 +115,7 @@ class Pi05Adapter:
             from openpi.shared.download import maybe_download
         except ImportError as e:
             raise ImportError(
-                f"Failed to import openpi modules: {e}\n" "Ensure openpi is installed: uv sync --extra native_pi05"
+                f"Failed to import openpi modules: {e}\n" "Ensure openpi is installed: uv sync --extra pi05"
             ) from e
 
         # Load from checkpoint if provided
