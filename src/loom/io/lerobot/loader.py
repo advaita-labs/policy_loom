@@ -1,8 +1,9 @@
 """LeRobot dataset loader with lazy imports for dependency isolation."""
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 import numpy as np
 import torch
@@ -24,7 +25,7 @@ def collate_lerobot_batch(batch: list[dict[str, Any]]) -> dict[str, Any]:
     """
     # Extract keys from first sample
     keys = batch[0].keys()
-    collated = {}
+    collated: dict[str, Any] = {}
 
     for key in keys:
         values = [sample[key] for sample in batch]
@@ -35,10 +36,7 @@ def collate_lerobot_batch(batch: list[dict[str, Any]]) -> dict[str, Any]:
         elif any(v is None for v in values):
             # Mixed None/non-None - convert None to zero tensors
             non_none_shape = next(v.shape for v in values if v is not None)
-            values = [
-                v if v is not None else np.zeros(non_none_shape, dtype=np.float32)
-                for v in values
-            ]
+            values = [v if v is not None else np.zeros(non_none_shape, dtype=np.float32) for v in values]
             collated[key] = torch.from_numpy(np.stack(values))
         elif key == "cameras":
             # List of camera lists - keep as nested list
@@ -46,13 +44,17 @@ def collate_lerobot_batch(batch: list[dict[str, Any]]) -> dict[str, Any]:
         elif key == "metadata":
             # List of metadata dicts - keep as list
             collated[key] = values
+        elif key == "images":
+            # Dict of camera images - keep as nested dict
+            # Each value is a list of dicts: [{cam: img_array}, ...]
+            collated[key] = values
         elif isinstance(values[0], np.ndarray):
             # Stack numpy arrays into tensor
             collated[key] = torch.from_numpy(np.stack(values))
         elif isinstance(values[0], torch.Tensor):
             # Stack tensors
             collated[key] = torch.stack(values)
-        elif isinstance(values[0], (int, float)):
+        elif isinstance(values[0], int | float):
             # Convert scalar lists to tensor
             collated[key] = torch.tensor(values)
         else:
@@ -237,7 +239,7 @@ class LeRobotTorchDataset(Dataset):
             idx: Sample index
 
         Returns:
-            Dict with keys: observation, action, metadata
+            Dict with keys: observation, action, images, metadata
         """
         item = self.dataset[idx]
 
@@ -264,6 +266,9 @@ class LeRobotTorchDataset(Dataset):
                 else:
                     observation = np.array(state_data, dtype=np.float32)
 
+        # Extract images
+        images = self._extract_images(item)
+
         # Extract action
         action = None
         if "action" in item:
@@ -286,5 +291,62 @@ class LeRobotTorchDataset(Dataset):
         return {
             "observation": observation,
             "action": action,
+            "images": images,
             "metadata": metadata,
         }
+
+    def _extract_images(self, item: dict[str, Any]) -> dict[str, np.ndarray]:
+        """Extract images from LeRobot format.
+
+        Args:
+            item: Single dataset item
+
+        Returns:
+            Dict mapping camera names to image arrays (H, W, C) uint8
+        """
+        images = {}
+
+        # Handle flat format: observation.images.cam_name
+        for key in item.keys():
+            if key.startswith("observation.images."):
+                cam_name = key.split(".")[-1]
+                img_data = item[key]
+                images[cam_name] = self._to_numpy_image(img_data)
+
+        # Handle nested format: observation -> images -> cam_name
+        if "observation" in item and isinstance(item["observation"], dict):
+            obs_dict = item["observation"]
+            if "images" in obs_dict and isinstance(obs_dict["images"], dict):
+                for cam_name, img_data in obs_dict["images"].items():
+                    images[cam_name] = self._to_numpy_image(img_data)
+
+        return images
+
+    def _to_numpy_image(self, img_data: Any) -> np.ndarray:
+        """Convert image data to numpy array (H, W, C) uint8.
+
+        Args:
+            img_data: Image data (tensor, PIL Image, or numpy array)
+
+        Returns:
+            Numpy array of shape (H, W, C) with dtype uint8
+        """
+        if isinstance(img_data, torch.Tensor):
+            img_np = img_data.cpu().numpy()
+        else:
+            img_np = np.array(img_data)
+
+        # Ensure uint8 dtype
+        if img_np.dtype != np.uint8:
+            # Assume float [0, 1] -> scale to [0, 255]
+            if img_np.max() <= 1.0:
+                img_np = (img_np * 255).astype(np.uint8)
+            else:
+                img_np = img_np.astype(np.uint8)
+
+        # Ensure (H, W, C) format
+        if img_np.ndim == 3 and img_np.shape[0] == 3:
+            # CHW -> HWC
+            img_np = np.transpose(img_np, (1, 2, 0))
+
+        return img_np
