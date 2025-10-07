@@ -2,9 +2,7 @@
 # Fine-tune a pretrained Pi0.5 checkpoint using LoRA
 #
 # Usage:
-#   1. Setup environment:
-#      python3.11 -m venv venv-pi05
-#      source venv-pi05/bin/activate
+#   1. Install with pi05 support:
 #      GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
 #
 #   2. Train:

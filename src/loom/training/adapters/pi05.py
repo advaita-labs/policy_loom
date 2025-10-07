@@ -6,9 +6,7 @@ It supports:
 - Loading from openpi checkpoints
 - LoRA fine-tuning (if available)
 
-⚠️  IMPORTANT: Install in separate environment due to dependency conflicts:
-    python3.11 -m venv venv-pi05
-    source venv-pi05/bin/activate
+⚠️  IMPORTANT: Install with pi05 extra:
     GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
 """
 
@@ -34,10 +32,7 @@ def _check_openpi_available() -> None:
         import openpi  # noqa: F401
     except ImportError as e:
         raise ImportError(
-            "Pi0.5 training requires openpi. Install with:\n"
-            "  python3.11 -m venv venv-pi05\n"
-            "  source venv-pi05/bin/activate\n"
-            "  GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05"
+            "Pi0.5 training requires openpi. Install with:\n" "  GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05"
         ) from e
 
 
@@ -101,7 +96,7 @@ class Pi05Adapter:
 
         # Lazy-load tokenizer and transform (will be initialized when needed)
         self._tokenizer: Any = None
-        self._transform: Any = None
+        self._transform: OpenPITransform | None = None
 
     def create_model(self) -> nn.Module:
         """Create and initialize Pi0.5 model.
