@@ -1,10 +1,10 @@
 """Physical Intelligence Pi0.5 adapter using openpi package.
 
-This adapter uses Physical Intelligence's official openpi implementation.
+This adapter uses Physical Intelligence's official PyTorch implementation.
 It supports:
 - Training from scratch
 - Loading from openpi checkpoints
-- LoRA fine-tuning (if available)
+- LoRA fine-tuning (if available in openpi)
 
 ⚠️  IMPORTANT: Install with pi05 extra:
     GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
@@ -19,40 +19,6 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, Dataset
 
 from loom.training.adapter import register_adapter
-
-
-class JAXModelWrapper(nn.Module):
-    """Wrapper to make JAX models compatible with PyTorch trainer.
-
-    JAX models don't have .to() or .parameters() methods, so we wrap them
-    to provide a PyTorch-compatible interface.
-    """
-
-    def __init__(self, jax_model: Any):
-        super().__init__()
-        self.jax_model = jax_model
-        self._device = torch.device("cpu")
-
-    def to(self, device: torch.device) -> "JAXModelWrapper":
-        """Mock .to() method for device placement.
-
-        JAX handles device placement differently, so this is a no-op.
-        """
-        self._device = device
-        return self
-
-    def parameters(self) -> list:
-        """Return empty list - JAX models manage params differently."""
-        return []
-
-    def forward(self, *args: Any, **kwargs: Any) -> Any:
-        """Forward pass through JAX model."""
-        return self.jax_model(*args, **kwargs)
-
-    def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        """Make callable like JAX models."""
-        return self.jax_model(*args, **kwargs)
-
 
 if TYPE_CHECKING:
     from loom.training.transforms.openpi_transform import OpenPITransform
@@ -145,14 +111,27 @@ class Pi05Adapter:
             ValueError: If model creation fails
         """
         try:
-            # Import openpi modules (correct API for Pi0.5)
-            from openpi.models import model as openpi_model
+            # Import openpi PyTorch modules
+            from openpi.models_pytorch.pi0_pytorch import PI0Pytorch
             from openpi.shared import download
             from openpi.training import config as openpi_config
         except ImportError as e:
             raise ImportError(
                 f"Failed to import openpi modules: {e}\n" "Ensure openpi is installed: uv sync --extra pi05"
             ) from e
+
+        # Get config
+        config_name = self.config.get("config_name", "pi05_libero")
+        pi05_config = openpi_config.get_config(config_name)
+
+        logger.info(f"Using openpi config: {config_name}")
+        logger.warning(
+            "Config action_dim/horizon from openpi may override user settings. " "Check config for actual values."
+        )
+
+        # Create PyTorch model
+        model = PI0Pytorch(pi05_config)
+        logger.info("Created Pi0.5 PyTorch model")
 
         # Load from checkpoint if provided
         if self.pretrained_path:
@@ -165,82 +144,30 @@ class Pi05Adapter:
                 else:
                     checkpoint_dir = Path(self.pretrained_path)
 
-                # Get config from checkpoint (default to pi05_base)
-                # User can specify config name in pretrained_path like "pi05_droid" or "pi05_aloha"
-                config_name = self.config.get("config_name", "pi05_base")
-                pi05_config = openpi_config.get_config(config_name)
+                # Load PyTorch weights
+                checkpoint_path = checkpoint_dir / "model.safetensors"
+                if not checkpoint_path.exists():
+                    raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-                # Load model parameters
-                params = openpi_model.restore_params(checkpoint_dir / "params")
-                model = pi05_config.model.load(params)
+                # Load state dict
+                from safetensors.torch import load_file
+
+                state_dict = load_file(str(checkpoint_path))
+                model.load_state_dict(state_dict, strict=True)
 
                 logger.info(f"Successfully loaded checkpoint from {checkpoint_dir}")
 
             except Exception as e:
                 raise ValueError(f"Failed to load checkpoint from {self.pretrained_path}: {e}") from e
 
-        else:
-            # Create model from scratch using default Pi0.5 config
-            logger.info("Creating Pi0.5 model from scratch")
-
-            try:
-                import jax
-
-                # Get a default Pi0.5 config (use libero as base)
-                config_name = self.config.get("config_name", "pi05_libero")
-                pi05_config = openpi_config.get_config(config_name)
-
-                # Customize action dimensions if needed
-                # Note: openpi configs may have fixed architectures
-                logger.warning(
-                    f"Using openpi config '{config_name}'. " f"Config action_dim/horizon may override user settings."
-                )
-
-                # Initialize model with random parameters using JAX
-                rng = jax.random.PRNGKey(0)  # Use seed 0 for reproducibility
-                model_rng, rng = jax.random.split(rng)
-                model = pi05_config.model.create(model_rng)
-
-                logger.info("Successfully created Pi0.5 model from scratch")
-
-            except Exception as e:
-                raise ValueError(f"Failed to create Pi0.5 model: {e}") from e
-
         # Apply LoRA if requested
         if self.use_lora:
-            logger.info(f"Applying LoRA with rank {self.lora_rank}")
-            model = self._apply_lora(model)
+            logger.warning("LoRA support not yet implemented for Pi0.5 PyTorch. Training full model.")
 
         # Freeze backbone if requested
         if self.freeze_backbone:
             logger.info("Freezing vision/language backbone")
             self._freeze_backbone(model)
-
-        # Wrap JAX model for PyTorch trainer compatibility
-        wrapped_model = JAXModelWrapper(model)
-        logger.info("Wrapped JAX model for PyTorch trainer compatibility")
-
-        return wrapped_model
-
-    def _apply_lora(self, model: nn.Module) -> nn.Module:
-        """Apply LoRA to model.
-
-        Args:
-            model: Pi0.5 model
-
-        Returns:
-            Model with LoRA applied
-        """
-        try:
-            from openpi.models.lora import apply_lora
-
-            model = apply_lora(model, rank=self.lora_rank)
-            logger.info(f"Applied LoRA with rank {self.lora_rank}")
-
-        except ImportError:
-            logger.warning("LoRA not available in openpi. Skipping LoRA application.")
-        except Exception as e:
-            logger.warning(f"Failed to apply LoRA: {e}. Continuing without LoRA.")
 
         return model
 
@@ -327,29 +254,11 @@ class Pi05Adapter:
 
         actions = actions.to(device)
 
-        # Forward pass - Pi0.5 compute_loss expects (observations, actions)
-        try:
-            output = model.compute_loss(obs_dict, actions)
-
-            # Extract loss
-            if isinstance(output, dict) and "loss" in output:
-                loss = output["loss"]
-            else:
-                loss = output
-
-        except AttributeError:
-            # Fallback: If compute_loss doesn't exist, try forward pass
-            output = model(obs_dict)
-            loss = nn.functional.mse_loss(output, actions)
+        # Forward pass - PI0Pytorch.forward() returns loss directly
+        loss = model.forward(obs_dict, actions)
 
         # Collect metrics
         metrics = {"loss": loss.item()}
-
-        # Add additional metrics if available
-        if isinstance(output, dict):
-            for key, value in output.items():
-                if key != "loss" and isinstance(value, torch.Tensor) and value.numel() == 1:
-                    metrics[key] = value.item()
 
         return loss, metrics
 
@@ -386,23 +295,10 @@ class Pi05Adapter:
 
         # Forward pass without gradients
         with torch.no_grad():
-            try:
-                output = model.compute_loss(obs_dict, actions)
-                if isinstance(output, dict) and "loss" in output:
-                    loss = output["loss"]
-                else:
-                    loss = output
-            except AttributeError:
-                output = model(obs_dict)
-                loss = nn.functional.mse_loss(output, actions)
+            loss = model.forward(obs_dict, actions)
 
         # Collect metrics with eval/ prefix
         metrics = {"eval/loss": loss.item()}
-
-        if isinstance(output, dict):
-            for key, value in output.items():
-                if key != "loss" and isinstance(value, torch.Tensor) and value.numel() == 1:
-                    metrics[f"eval/{key}"] = value.item()
 
         return metrics
 
