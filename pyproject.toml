@@ -28,17 +28,13 @@ diffusion = [
     "datasets>=2.0.0",  # For loading LeRobot format datasets
 ]
 
-# Pi0.5 model training (Physical Intelligence VLA - latest)
-# Install in separate venv: uv sync --extra pi05
+# Pi0.5 using Physical Intelligence's official openpi package
+# Install in separate venv: python3.11 -m venv venv-pi05 && source venv-pi05/bin/activate && uv sync --extra pi05
 pi05 = [
-    "lerobot>=0.1.0",
-    "datasets>=4.0.0,<4.2.0",
-    "einops>=0.6.0",
+    "openpi @ git+https://github.com/Physical-Intelligence/openpi.git",
+    "datasets>=2.0.0",  # For LeRobot format data loading only
     "wandb>=0.13.3",
-    "accelerate>=0.13.2",
-    "torchvision>=0.21.0,<0.23.0",
-    "diffusers>=0.27.2,<0.36.0",
-    "transformers @ git+https://github.com/huggingface/transformers.git@fix/lerobot_openpi",
+    "einops>=0.6.0",
 ]
 
 # Development dependencies
@@ -52,7 +48,7 @@ dev = [
     "pre-commit>=4.0.0",
 ]
 
-# All optional features (excluding pi05 due to conflicts)
+# All optional features (pi05 requires separate venv due to conflicts)
 all = [
     "policy-loom[diffusion]",
 ]
