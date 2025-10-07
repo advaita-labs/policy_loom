@@ -5,7 +5,7 @@
 #   1. Setup environment:
 #      python3.11 -m venv venv-pi05
 #      source venv-pi05/bin/activate
-#      uv sync --extra pi05
+#      GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
 #
 #   2. Train:
 #      loom train configs/pi05_lora.yaml

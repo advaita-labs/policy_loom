@@ -9,7 +9,7 @@ It supports:
 ⚠️  IMPORTANT: Install in separate environment due to dependency conflicts:
     python3.11 -m venv venv-pi05
     source venv-pi05/bin/activate
-    uv sync --extra pi05
+    GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
 """
 
 import logging
@@ -37,7 +37,7 @@ def _check_openpi_available() -> None:
             "Pi0.5 training requires openpi. Install with:\n"
             "  python3.11 -m venv venv-pi05\n"
             "  source venv-pi05/bin/activate\n"
-            "  uv sync --extra pi05"
+            "  GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05"
         ) from e
 
 
@@ -100,8 +100,8 @@ class Pi05Adapter:
         logger.info(f"  Freeze backbone: {self.freeze_backbone}")
 
         # Lazy-load tokenizer and transform (will be initialized when needed)
-        self._tokenizer = None
-        self._transform = None
+        self._tokenizer: Any = None
+        self._transform: Any = None
 
     def create_model(self) -> nn.Module:
         """Create and initialize Pi0.5 model.
