@@ -26,25 +26,11 @@ LeRobot Dataset → Transform → OpenPI Format → Pi0.5 Model → Training
 
 ### Prerequisites
 
-- Python 3.11+ (required by openpi)
+- Python 3.11+ (required by the project)
 - NVIDIA GPU with CUDA support
 - Git and Git LFS
 
-### Step 1: Create Isolated Environment
-
-Pi0.5 requires dependencies that conflict with other models. Use a dedicated virtual environment:
-
-```bash
-# Create environment
-python3.11 -m venv venv-pi05
-
-# Activate environment
-source venv-pi05/bin/activate  # Linux/Mac
-# OR
-venv-pi05\Scripts\activate  # Windows
-```
-
-### Step 2: Install policy_loom with Pi0.5 Support
+### Step 1: Install policy_loom with Pi0.5 Support
 
 ```bash
 # Navigate to policy_loom directory
@@ -61,7 +47,7 @@ This installs:
 - All required dependencies (PyTorch, transformers, JAX, etc.)
 - policy_loom training infrastructure
 
-### Step 3: Verify Installation
+### Step 2: Verify Installation
 
 ```bash
 # Check openpi is installed
@@ -89,9 +75,6 @@ python --version  # Should be 3.11 or higher
 ### Training from Scratch
 
 ```bash
-# Activate pi05 environment
-source venv-pi05/bin/activate
-
 # Train with minimal config
 loom train configs/pi05_minimal.yaml
 ```
@@ -99,9 +82,6 @@ loom train configs/pi05_minimal.yaml
 ### Fine-Tuning with LoRA
 
 ```bash
-# Activate pi05 environment
-source venv-pi05/bin/activate
-
 # Fine-tune with LoRA
 loom train configs/pi05_lora.yaml
 ```
@@ -298,46 +278,30 @@ Or use local path:
 pretrained_path: "./checkpoints/my_pi05_model"
 ```
 
-## Environment Management
+## Multiple Model Support
 
-### Multiple Model Support
-
-policy_loom supports multiple model types via isolated environments:
+policy_loom supports multiple model types through optional extras:
 
 ```bash
-# Diffusion Policy environment
-python3.10 -m venv venv-diffusion
-source venv-diffusion/bin/activate
+# Install diffusion policy support
 uv sync --extra diffusion
 
-# Pi0.5 environment
-python3.11 -m venv venv-pi05
-source venv-pi05/bin/activate
-uv sync --extra pi05
+# Install Pi0.5 support (requires GIT_LFS_SKIP_SMUDGE)
+GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
+
+# Install both
+GIT_LFS_SKIP_SMUDGE=1 uv sync --extra diffusion --extra pi05
 ```
 
-**Important:** Only one policy can run at a time. Always activate the correct environment before training.
-
-### Switching Environments
-
-```bash
-# Deactivate current environment
-deactivate
-
-# Activate desired environment
-source venv-pi05/bin/activate
-
-# Verify
-python -c "import openpi; print('Pi0.5 environment active')"
-```
+**Note:** All models now require Python 3.11+.
 
 ## Troubleshooting
 
 ### ImportError: No module named 'openpi'
 
-**Solution:** Ensure you're in the pi05 environment:
+**Solution:** Ensure pi05 extra is installed:
 ```bash
-source venv-pi05/bin/activate
+GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
 python -c "import openpi"
 ```
 
@@ -351,12 +315,12 @@ python -c "import openpi"
 
 ### Dependency conflicts
 
-**Solution:** Use isolated environment:
+**Solution:** Reinstall with clean environment:
 ```bash
-# Create fresh environment
-rm -rf venv-pi05
-python3.11 -m venv venv-pi05
-source venv-pi05/bin/activate
+# Remove virtual environment
+rm -rf .venv
+
+# Reinstall
 GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
 ```
 
