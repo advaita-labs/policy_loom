@@ -50,9 +50,11 @@ venv-pi05\Scripts\activate  # Windows
 # Navigate to policy_loom directory
 cd policy_loom
 
-# Install with pi05 extra
-uv sync --extra pi05
+# Install with pi05 extra (skip Git LFS files we don't need)
+GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
 ```
+
+**Note:** We set `GIT_LFS_SKIP_SMUDGE=1` to skip downloading large test dataset files from the lerobot dependency. We only need the Python code, not the test data.
 
 This installs:
 - Physical Intelligence's openpi package
@@ -67,6 +69,19 @@ python -c "import openpi; print('✓ openpi installed')"
 
 # Check policy_loom can load adapter
 python -c "from loom.training.adapters.pi05 import Pi05Adapter; print('✓ Pi05Adapter available')"
+```
+
+**Troubleshooting Installation:**
+
+If you see Git LFS errors during installation:
+```bash
+# Solution: Skip LFS files (we don't need test datasets)
+GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
+```
+
+If openpi import fails, ensure you're using Python 3.11+:
+```bash
+python --version  # Should be 3.11 or higher
 ```
 
 ## Quick Start
@@ -342,8 +357,19 @@ python -c "import openpi"
 rm -rf venv-pi05
 python3.11 -m venv venv-pi05
 source venv-pi05/bin/activate
-uv sync --extra pi05
+GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
 ```
+
+### Git LFS download errors
+
+**Error:** `remote missing object` or `smudge filter lfs failed`
+
+**Solution:** Skip LFS files during installation:
+```bash
+GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
+```
+
+These are large test dataset files from lerobot that we don't need.
 
 ### Model creation fails
 
