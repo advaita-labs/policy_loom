@@ -307,5 +307,121 @@ def _create_dataset(data: dict[str, Any]) -> Any:
     return DictDataset(data["observation"], data["action"])
 
 
+@app.command()
+def train_pi05(
+    dataset: Annotated[str, typer.Argument(help="HuggingFace LeRobot dataset")],
+    config_name: Annotated[str, typer.Option(help="OpenPI config")] = "pi05_libero",
+    batch_size: Annotated[int, typer.Option(help="Batch size")] = 256,
+    steps: Annotated[int, typer.Option(help="Training steps")] = 30000,
+    output_dir: Annotated[Path, typer.Option(help="Checkpoint output directory")] = Path("./checkpoints"),
+    lr: Annotated[float | None, typer.Option(help="Learning rate (default: use config)")] = None,
+) -> None:
+    """Train Pi0.5 using OpenPI (simplified integration).
+
+    Example: loom train-pi05 gauravpradeep/t02_piper_pick_and_place_bimanual --steps 30000
+    """
+    try:
+        from openpi.training import config as openpi_config
+        from openpi.training.data_loader import create_data_loader
+        from openpi.models_pytorch.pi0_pytorch import PI0Pytorch
+        import dataclasses
+    except ImportError as e:
+        typer.echo(f"Error: OpenPI not installed: {e}", err=True)
+        typer.echo("Install with: uv sync --extra pi05", err=True)
+        raise typer.Exit(1)
+
+    # Load and configure
+    typer.echo(f"Loading OpenPI config '{config_name}'...")
+    try:
+        config = openpi_config.get_config(config_name)
+    except KeyError:
+        typer.echo(f"Error: Unknown config '{config_name}'", err=True)
+        typer.echo("Available configs: pi05_libero, pi05_droid, pi0_libero, etc.", err=True)
+        raise typer.Exit(1)
+
+    config = dataclasses.replace(
+        config,
+        data=dataclasses.replace(config.data, repo_id=dataset),
+        batch_size=batch_size,
+        num_train_steps=steps,
+    )
+
+    typer.echo(f"\nTraining Pi0.5:")
+    typer.echo(f"  Dataset: {dataset}")
+    typer.echo(f"  Steps: {steps}")
+    typer.echo(f"  Batch size: {batch_size}")
+    typer.echo(f"  Output: {output_dir}")
+
+    # Setup device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    typer.echo(f"  Device: {device}")
+
+    # Create model
+    typer.echo("\nCreating model...")
+    model = PI0Pytorch(config.model).to(device)
+    num_params = sum(p.numel() for p in model.parameters()) / 1e9
+    typer.echo(f"  Model size: {num_params:.1f}B parameters")
+
+    # Create optimizer with config's learning rate or override
+    learning_rate = lr if lr is not None else config.lr_schedule.peak_lr
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    typer.echo(f"  Learning rate: {learning_rate}")
+
+    # Data loader
+    typer.echo("\nCreating data loader...")
+    try:
+        loader = create_data_loader(config, framework="pytorch", shuffle=True, skip_norm_stats=True)
+        typer.echo("  Data loader ready")
+    except Exception as e:
+        typer.echo(f"Error: Data loading failed: {e}", err=True)
+        typer.echo("\nPossible issues:", err=True)
+        typer.echo("  - Dataset not found on HuggingFace", err=True)
+        typer.echo("  - Dataset format incompatible", err=True)
+        raise typer.Exit(1)
+
+    # Create checkpoint directory
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Training loop
+    typer.echo(f"\nTraining started...\n")
+    for step, (obs, actions) in enumerate(loader):
+        if step >= steps:
+            break
+
+        obs, actions = obs.to(device), actions.to(device)
+        loss = model.forward(obs, actions)
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # Log progress
+        if step % 100 == 0:
+            typer.echo(f"Step {step}/{steps}: Loss = {loss.item():.4f}")
+
+        # Save checkpoint every 1000 steps
+        if step > 0 and step % 1000 == 0:
+            checkpoint_path = output_dir / f"checkpoint_step_{step}.pt"
+            torch.save({
+                'step': step,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': loss.item(),
+                'config': config,
+            }, checkpoint_path)
+            typer.echo(f"  Checkpoint saved: {checkpoint_path}")
+
+    # Save final checkpoint
+    final_path = output_dir / "final_checkpoint.pt"
+    torch.save({
+        'step': steps,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'config': config,
+    }, final_path)
+
+    typer.echo(f"\nTraining complete!")
+    typer.echo(f"Final checkpoint: {final_path}")
+
+
 if __name__ == "__main__":
     app()
