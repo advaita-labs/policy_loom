@@ -11,11 +11,14 @@
 model:
   type: pi05
 
-  # OpenPI config (pi05_libero, pi05_droid, pi05_aloha, etc.)
+  # OpenPI base config (pi05_libero, pi05_droid, pi05_aloha, etc.)
   config_name: pi05_libero
 
-  # Model architecture (may be overridden by openpi config)
-  action_dim: 7
+  # Model architecture
+  # NOTE: action_dim is HARDCODED to 32 in Pi0.5 model architecture
+  # Your dataset actions will be automatically padded to 32 dimensions
+  # If your dataset has >32 action dims, training will fail with clear error
+  # The action_dim parameter is NOT user-configurable for pi05
   action_horizon: 10
   image_size: [224, 224]
 
@@ -45,7 +48,7 @@ training:
 
 data:
   type: lerobot
-  dataset: "lerobot/pusht"  # LeRobot format dataset
+  dataset: "gauravpradeep/t02_piper_pick_and_place_bimanual"  # LeRobot format dataset
   train_split: train
   eval_split: null  # Set to "test" for evaluation
   local_dir: null  # Cache directory (optional)
