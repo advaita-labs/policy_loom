@@ -12,7 +12,7 @@ dependencies = [
     "opencv-python>=4.8.0",
     "mcap>=1.0.0",
     "torch>=2.0.0",
-    "transformers>=4.30.0",
+    "transformers==4.53.2",  # Required by openpi with custom patches
     "pillow>=10.0.0",
     "pyyaml>=6.0",
     "typer>=0.9.0",
@@ -112,7 +112,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "--cov=loom --cov-report=term-missing --cov-report=html"
+addopts = ""
 
 [dependency-groups]
 dev = [
