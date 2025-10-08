@@ -41,6 +41,7 @@ class OpenPITransform:
         tokenizer: Any | None = None,
         image_size: tuple[int, int] = (224, 224),
         default_prompt: str | None = None,
+        camera_name_mapping: dict[str, str] | None = None,
     ):
         """Initialize OpenPI transform.
 
@@ -48,54 +49,78 @@ class OpenPITransform:
             tokenizer: Optional tokenizer for prompts
             image_size: Target size for images (H, W)
             default_prompt: Default prompt if none provided in batch
+            camera_name_mapping: Optional mapping from dataset camera names to OpenPI expected names
         """
         self.tokenizer = tokenizer
         self.image_size = image_size
         self.default_prompt = default_prompt
+        self.camera_name_mapping = camera_name_mapping or {}
 
-    def __call__(self, batch: dict[str, Any]) -> tuple[dict[str, torch.Tensor], torch.Tensor]:
+    def __call__(self, batch: dict[str, Any]) -> tuple[Any, torch.Tensor]:
         """Transform LeRobot batch to OpenPI format.
 
         Args:
             batch: LeRobot batch dict with keys:
                 - observation: (B, state_dim) or None
+                - state: (B, state_dim) or None (alternative key)
                 - images: list of dict[str, np.ndarray] or None
                 - action: (B, action_dim)
                 - metadata: list of dicts [optional]
                 - prompt: list of strings [optional]
 
         Returns:
-            Tuple of (observations_dict, actions_tensor)
-                - observations_dict: OpenPI format observation dict
+            Tuple of (observation, actions_tensor)
+                - observation: OpenPI Observation object
                 - actions_tensor: Action tensor (B, action_dim)
 
         Raises:
             ValueError: If batch is missing required fields
         """
+        from openpi.models.model import Observation
+
         # Initialize observation dict
-        obs_dict: dict[str, torch.Tensor] = {}
+        obs_data: dict[str, torch.Tensor] = {}
+
+        # Get batch size
+        batch_size = len(batch["action"])
 
         # 1. Process images
         if "images" in batch and batch["images"] is not None:
-            obs_dict.update(self._process_images(batch["images"]))
+            obs_data.update(self._process_images(batch["images"]))
+        else:
+            # Observation.from_dict requires 'image' and 'image_mask' keys
+            # Provide empty dummies if no images
+            obs_data["image"] = {}
+            obs_data["image_mask"] = {}
 
         # 2. Process proprioceptive state
-        if "observation" in batch and batch["observation"] is not None:
-            obs_dict["state"] = self._process_state(batch["observation"])
+        # Try both 'observation' and 'state' keys
+        state_data = batch.get("observation") if "observation" in batch else batch.get("state")
+        if state_data is not None:
+            obs_data["state"] = self._process_state(state_data)
+        else:
+            # Observation.from_dict requires 'state' key
+            # Provide dummy state if none present
+            obs_data["state"] = torch.zeros((batch_size, 1), dtype=torch.float32)
 
         # 3. Process prompts (if provided)
         if "prompt" in batch:
             prompt_tokens, prompt_mask = self._process_prompts(batch["prompt"])
             if prompt_tokens is not None:
-                obs_dict["tokenized_prompt"] = prompt_tokens
-                obs_dict["tokenized_prompt_mask"] = prompt_mask
+                obs_data["tokenized_prompt"] = prompt_tokens
+                obs_data["tokenized_prompt_mask"] = prompt_mask
         elif self.default_prompt and self.tokenizer:
             # Use default prompt
-            batch_size = len(batch["action"])
             prompts = [self.default_prompt] * batch_size
             prompt_tokens, prompt_mask = self._process_prompts(prompts)
-            obs_dict["tokenized_prompt"] = prompt_tokens
-            obs_dict["tokenized_prompt_mask"] = prompt_mask
+            obs_data["tokenized_prompt"] = prompt_tokens
+            obs_data["tokenized_prompt_mask"] = prompt_mask
+        else:
+            # No prompts - provide empty/minimal tokens
+            # OpenPI requires tokenized_prompt and tokenized_prompt_mask together
+            # Create minimal token sequence (e.g., just BOS/EOS tokens - token_id=1 is common for BOS)
+            obs_data["tokenized_prompt"] = torch.ones((batch_size, 1), dtype=torch.int32)
+            obs_data["tokenized_prompt_mask"] = torch.ones((batch_size, 1), dtype=torch.bool)
 
         # 4. Extract actions
         if "action" not in batch:
@@ -105,36 +130,53 @@ class OpenPITransform:
         if not isinstance(actions, torch.Tensor):
             actions = torch.from_numpy(np.array(actions, dtype=np.float32))
 
-        return obs_dict, actions
+        # Pad actions to 32 dimensions if needed (OpenPI hardcodes action_dim=32 in model architecture)
+        if actions.shape[-1] < 32:
+            padding = torch.zeros((*actions.shape[:-1], 32 - actions.shape[-1]), dtype=actions.dtype)
+            actions = torch.cat([actions, padding], dim=-1)
+        elif actions.shape[-1] > 32:
+            raise ValueError(
+                f"Action dimension {actions.shape[-1]} exceeds OpenPI's hardcoded action_dim=32. "
+                f"Cannot truncate actions. Please check your dataset."
+            )
 
-    def _normalize_image(self, img: np.ndarray) -> np.ndarray:
-        """Normalize image from uint8[0,255] to float32[-1,1].
+        # Create Observation object
+        observation = Observation.from_dict(obs_data)
 
-        OpenPI expects images normalized to [-1, 1] where:
-            - 0 (black) → -1.0
-            - 127.5 (mid-gray) → 0.0
-            - 255 (white) → 1.0
+        return observation, actions
+
+    def _to_numpy_uint8(self, img: np.ndarray | Any) -> np.ndarray:
+        """Convert image to numpy uint8[0,255] format.
 
         Args:
-            img: uint8 array in range [0, 255], shape (H, W, 3)
+            img: Image as numpy array or PIL Image, shape (H, W, 3)
 
         Returns:
-            float32 array in range [-1, 1], shape (H, W, 3)
+            uint8 numpy array in range [0, 255], shape (H, W, 3)
 
         Raises:
-            ValueError: If image dtype is not uint8 or shape is invalid
+            ValueError: If image shape is invalid
         """
+        # Convert PIL Image to numpy if needed
+        if not isinstance(img, np.ndarray):
+            from PIL import Image
+            if isinstance(img, Image.Image):
+                img = np.array(img)
+            else:
+                img = np.array(img)
+
+        # Ensure uint8
         if img.dtype != np.uint8:
-            raise ValueError(
-                f"Expected uint8 image for normalization, got {img.dtype}. "
-                f"Images must be in range [0, 255] with dtype uint8."
-            )
+            # If float in [0, 1], scale to [0, 255]
+            if img.dtype in [np.float32, np.float64] and img.max() <= 1.0:
+                img = (img * 255).astype(np.uint8)
+            else:
+                img = img.astype(np.uint8)
 
         if img.ndim != 3 or img.shape[2] != 3:
             raise ValueError(f"Expected image shape (H, W, 3), got {img.shape}. " f"Only RGB images are supported.")
 
-        # Normalize to [-1, 1]
-        return (img.astype(np.float32) / 127.5) - 1.0
+        return img
 
     def _process_images(self, images_list: list[dict[str, np.ndarray]]) -> dict[str, torch.Tensor]:
         """Process images from LeRobot format to OpenPI format.
@@ -159,27 +201,30 @@ class OpenPITransform:
         masks_dict = {}
 
         for cam_name in camera_names:
+            # Apply camera name mapping if provided
+            output_cam_name = self.camera_name_mapping.get(cam_name, cam_name)
             # Stack images for this camera
             cam_images = []
             for sample_imgs in images_list:
                 if cam_name in sample_imgs:
                     img = sample_imgs[cam_name]
-                    # Validate and normalize uint8[0,255] -> float32[-1,1]
-                    img_float = self._normalize_image(img)
-                    cam_images.append(img_float)
+                    # Convert PIL/other to numpy uint8 if needed
+                    img_uint8 = self._to_numpy_uint8(img)
+                    cam_images.append(img_uint8)
                 else:
-                    # Missing image - create black image (normalized to -1.0)
-                    img_float = np.full((*self.image_size, 3), -1.0, dtype=np.float32)
-                    cam_images.append(img_float)
+                    # Missing image - create black image as uint8
+                    img_uint8 = np.zeros((*self.image_size, 3), dtype=np.uint8)
+                    cam_images.append(img_uint8)
 
             # Stack to (B, H, W, 3)
             images_tensor = torch.from_numpy(np.stack(cam_images, axis=0))
-            images_dict[cam_name] = images_tensor
+            images_dict[output_cam_name] = images_tensor
 
             # Create masks (all True for real images)
-            masks_dict[cam_name] = torch.ones(batch_size, dtype=torch.bool)
+            masks_dict[output_cam_name] = torch.ones(batch_size, dtype=torch.bool)
 
-        return {"images": images_dict, "image_masks": masks_dict}
+        # Return with singular keys 'image' and 'image_mask' as expected by Observation.from_dict
+        return {"image": images_dict, "image_mask": masks_dict}
 
     def _process_state(self, observation: torch.Tensor | np.ndarray) -> torch.Tensor:
         """Process proprioceptive state.
