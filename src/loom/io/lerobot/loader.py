@@ -21,11 +21,26 @@ def collate_lerobot_batch(batch: list[dict[str, Any]]) -> dict[str, Any]:
         batch: List of sample dictionaries
 
     Returns:
-        Collated batch dictionary
+        Collated batch dictionary with normalized keys (actions -> action)
     """
     # Extract keys from first sample
     keys = batch[0].keys()
     collated: dict[str, Any] = {}
+
+    # Normalize 'actions' to 'action' for consistency
+    # (some datasets use plural, transforms expect singular)
+    if "actions" in keys and "action" not in keys:
+        batch = [{**sample, "action": sample.pop("actions")} for sample in batch]
+        keys = batch[0].keys()
+
+    # Extract top-level image keys (e.g., left_image, right_image) into images dict
+    image_keys = [k for k in keys if "image" in k.lower() and k != "images"]
+    if image_keys:
+        # Create images dict for each sample
+        for sample in batch:
+            sample["images"] = {k.replace("_image", ""): sample.pop(k) for k in image_keys if k in sample}
+        # Update keys after extraction
+        keys = batch[0].keys()
 
     for key in keys:
         values = [sample[key] for sample in batch]
@@ -45,8 +60,9 @@ def collate_lerobot_batch(batch: list[dict[str, Any]]) -> dict[str, Any]:
             # List of metadata dicts - keep as list
             collated[key] = values
         elif key == "images":
-            # Dict of camera images - keep as nested dict
-            # Each value is a list of dicts: [{cam: img_array}, ...]
+            # Images dict created from top-level image keys
+            # Keep as list of dicts: [{cam: img_array}, ...]
+            # Transform expects: list[dict[str, np.ndarray]]
             collated[key] = values
         elif isinstance(values[0], np.ndarray):
             # Stack numpy arrays into tensor
