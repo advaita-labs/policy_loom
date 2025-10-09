@@ -2,6 +2,60 @@
 
 Open-source toolkit for building, preprocessing, and training Vision-Language-Action (VLA) models for robotics.
 
+## Architecture Overview
+
+```mermaid
+graph LR
+    subgraph Input["📥 Data Sources"]
+        V[🎥 Videos<br/>]
+        R[🤖 Robot Data<br/>]
+        H[🤗 Datasets<br/>LeRobot/HF]
+    end
+    
+    subgraph Core["⚙️ Core Pipeline"]
+        direction TB
+        Read[📖 Readers<br/>Extract & Parse]
+        Sync[⏱️ Synchronize<br/>Temporal Align]
+        Filter[🔍 Filter<br/>Quality Check]
+    end
+    
+    subgraph Process["🔄 Model Preparation"]
+        direction TB
+        Pre[🎨 Preprocess<br/>Model-Specific]
+        Batch[📦 Batch<br/>DataLoader]
+    end
+    
+    subgraph Train["🎯 Training"]
+        direction TB
+        Adapt[🔌 Adapter<br/>Model Interface]
+        Model[🧠 VLA Model<br/>SmolVLA/Diffusion/Pi0.5]
+    end
+    
+    subgraph Output["📤 Outputs"]
+        Ckpt[💾 Checkpoints]
+        Logs[📊 Metrics]
+    end
+    
+    V --> Read
+    R --> Read
+    H --> Read
+    
+    Read --> Sync
+    Sync --> Filter
+    Filter --> Pre
+    Pre --> Batch
+    Batch --> Adapt
+    Adapt --> Model
+    Model --> Ckpt
+    Model --> Logs
+    
+    style Input fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Core fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Process fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style Train fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style Output fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+```
+
 ## Installation
 
 ### Base Installation
