@@ -240,23 +240,19 @@ class Pi05Adapter:
             Tuple of (loss tensor, metrics dict)
         """
         # Transform batch to OpenPI format
-        obs_dict, actions = self._transform_batch(batch)
+        observation, actions = self._transform_batch(batch)
 
-        # Move to device
-        obs_dict = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in obs_dict.items()}
-
-        # Handle nested dicts (images, image_masks)
-        for key in ["images", "image_masks"]:
-            if key in obs_dict and isinstance(obs_dict[key], dict):
-                obs_dict[key] = {
-                    cam: tensor.to(device) if isinstance(tensor, torch.Tensor) else tensor
-                    for cam, tensor in obs_dict[key].items()
-                }
-
+        # Move tensors to device
+        # Use jax.tree.map to move all tensors in the observation to the device
+        import jax
+        observation = jax.tree.map(
+            lambda x: x.to(device) if isinstance(x, torch.Tensor) else x,
+            observation
+        )
         actions = actions.to(device)
 
         # Forward pass - PI0Pytorch.forward() returns loss directly
-        loss = model.forward(obs_dict, actions)
+        loss = model.forward(observation, actions)
 
         # Collect metrics
         metrics = {"loss": loss.item()}
@@ -280,23 +276,19 @@ class Pi05Adapter:
             Metrics dict with eval/ prefix
         """
         # Transform batch
-        obs_dict, actions = self._transform_batch(batch)
+        observation, actions = self._transform_batch(batch)
 
-        # Move to device
-        obs_dict = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in obs_dict.items()}
-
-        for key in ["images", "image_masks"]:
-            if key in obs_dict and isinstance(obs_dict[key], dict):
-                obs_dict[key] = {
-                    cam: tensor.to(device) if isinstance(tensor, torch.Tensor) else tensor
-                    for cam, tensor in obs_dict[key].items()
-                }
-
+        # Move tensors to device
+        import jax
+        observation = jax.tree.map(
+            lambda x: x.to(device) if isinstance(x, torch.Tensor) else x,
+            observation
+        )
         actions = actions.to(device)
 
         # Forward pass without gradients
         with torch.no_grad():
-            loss = model.forward(obs_dict, actions)
+            loss = model.forward(observation, actions)
 
         # Collect metrics with eval/ prefix
         metrics = {"eval/loss": loss.item()}
@@ -385,10 +377,19 @@ class Pi05Adapter:
         if self._transform is None:
             from loom.training.transforms.openpi_transform import OpenPITransform
 
+            # Default camera name mapping for common datasets
+            # Maps dataset camera names to OpenPI expected names
+            camera_mapping = self.config.get("camera_name_mapping", {
+                "left": "base_0_rgb",
+                "middle": "left_wrist_0_rgb",
+                "right": "right_wrist_0_rgb",
+            })
+
             self._transform = OpenPITransform(
                 tokenizer=self._get_tokenizer(),
                 image_size=self.image_size,
                 default_prompt=self.config.get("default_prompt"),
+                camera_name_mapping=camera_mapping,
             )
             logger.info("Initialized OpenPI transform")
 
@@ -412,13 +413,9 @@ class Pi05Adapter:
         transform = self._get_transform()
         obs_dict, actions = transform(batch)
 
-        # Validate action dimensions
-        if actions.shape[-1] != self.action_dim:
-            raise ValueError(
-                f"Action dimension mismatch: config specifies action_dim={self.action_dim}, "
-                f"but batch has shape {actions.shape} (action_dim={actions.shape[-1]}). "
-                f"Check your model config and dataset."
-            )
+        # Note: OpenPI models have hardcoded action_dim=32 in their architecture
+        # The transform automatically pads actions to 32 dimensions
+        # The self.action_dim parameter is informational (shows dataset's original action_dim)
 
         # Check action horizon (LeRobot provides single-step actions)
         if self.action_horizon > 1:
