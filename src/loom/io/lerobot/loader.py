@@ -70,6 +70,11 @@ def collate_lerobot_batch(batch: list[dict[str, Any]]) -> dict[str, Any]:
         elif isinstance(values[0], torch.Tensor):
             # Stack tensors
             collated[key] = torch.stack(values)
+        elif hasattr(values[0], "__array__"):
+            # Handle HuggingFace Column objects or other array-like objects
+            # Convert to numpy arrays first, then stack
+            np_values = [np.array(v) for v in values]
+            collated[key] = torch.from_numpy(np.stack(np_values))
         elif isinstance(values[0], int | float):
             # Convert scalar lists to tensor
             collated[key] = torch.tensor(values)
@@ -259,9 +264,10 @@ class LeRobotTorchDataset(Dataset):
         """
         item = self.dataset[idx]
 
-        # Handle two dataset formats:
+        # Handle multiple dataset formats:
         # 1. Nested: item["observation"] = {"state": [...], "images": {...}}
         # 2. Flat: item["observation.state"] = [...]
+        # 3. Top-level: item["state"] = [...]
 
         # Extract proprioceptive state (observation)
         observation = None
@@ -281,14 +287,27 @@ class LeRobotTorchDataset(Dataset):
                     observation = state_data.cpu().numpy().astype(np.float32)
                 else:
                     observation = np.array(state_data, dtype=np.float32)
+        elif "state" in item:
+            # Top-level state key
+            state_data = item["state"]
+            if isinstance(state_data, torch.Tensor):
+                observation = state_data.cpu().numpy().astype(np.float32)
+            else:
+                observation = np.array(state_data, dtype=np.float32)
 
         # Extract images
         images = self._extract_images(item)
 
-        # Extract action
+        # Extract action (try both 'action' and 'actions' keys)
         action = None
         if "action" in item:
             action_data = item["action"]
+            if isinstance(action_data, torch.Tensor):
+                action = action_data.cpu().numpy().astype(np.float32)
+            else:
+                action = np.array(action_data, dtype=np.float32)
+        elif "actions" in item:
+            action_data = item["actions"]
             if isinstance(action_data, torch.Tensor):
                 action = action_data.cpu().numpy().astype(np.float32)
             else:
@@ -335,6 +354,14 @@ class LeRobotTorchDataset(Dataset):
             if "images" in obs_dict and isinstance(obs_dict["images"], dict):
                 for cam_name, img_data in obs_dict["images"].items():
                     images[cam_name] = self._to_numpy_image(img_data)
+
+        # Handle flat top-level image keys (e.g., left_image, right_image)
+        for key in item.keys():
+            if "image" in key.lower() and key not in ["images", "observation"]:
+                # Remove '_image' suffix if present to get camera name
+                cam_name = key.replace("_image", "").replace("Image", "")
+                img_data = item[key]
+                images[cam_name] = self._to_numpy_image(img_data)
 
         return images
 
