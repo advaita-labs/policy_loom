@@ -311,6 +311,7 @@ def _create_dataset(data: dict[str, Any]) -> Any:
 def train_pi05(
     dataset: Annotated[str, typer.Argument(help="HuggingFace LeRobot dataset")],
     config_name: Annotated[str, typer.Option(help="OpenPI config")] = "pi05_libero",
+    custom_config: Annotated[Path | None, typer.Option(help="Path to custom Python config module")] = None,
     batch_size: Annotated[int, typer.Option(help="Batch size")] = 256,
     steps: Annotated[int, typer.Option(help="Training steps")] = 30000,
     output_dir: Annotated[Path, typer.Option(help="Checkpoint output directory")] = Path("./checkpoints"),
@@ -319,32 +320,126 @@ def train_pi05(
     """Train Pi0.5 using OpenPI (simplified integration).
 
     Example: loom train-pi05 gauravpradeep/t02_piper_pick_and_place_bimanual --steps 30000
+
+    For custom datasets, provide a custom config module:
+        loom train-pi05 DATASET --custom-config configs/pi05_gauravpradeep_simple.py
     """
     try:
         from openpi.training import config as openpi_config
-        from openpi.training.data_loader import create_data_loader
         from openpi.models_pytorch.pi0_pytorch import PI0Pytorch
         import dataclasses
+        import jax
+        import numpy as np
     except ImportError as e:
         typer.echo(f"Error: OpenPI not installed: {e}", err=True)
         typer.echo("Install with: uv sync --extra pi05", err=True)
         raise typer.Exit(1)
 
-    # Load and configure
-    typer.echo(f"Loading OpenPI config '{config_name}'...")
-    try:
-        config = openpi_config.get_config(config_name)
-    except KeyError:
-        typer.echo(f"Error: Unknown config '{config_name}'", err=True)
-        typer.echo("Available configs: pi05_libero, pi05_droid, pi0_libero, etc.", err=True)
-        raise typer.Exit(1)
+    # Patch torch.stack to handle HuggingFace Column objects
+    # This fixes an issue in lerobot's LeRobotDataset.__init__ which calls
+    # torch.stack on Column objects
+    _original_torch_stack = torch.stack
 
-    config = dataclasses.replace(
-        config,
-        data=dataclasses.replace(config.data, repo_id=dataset),
-        batch_size=batch_size,
-        num_train_steps=steps,
-    )
+    def _patched_torch_stack(tensors, *args, **kwargs):
+        """Patched torch.stack that handles HuggingFace Column objects."""
+        # Check if tensors is a HuggingFace Column
+        if hasattr(tensors, '__class__') and 'Column' in tensors.__class__.__name__:
+            # Convert Column to list first
+            tensors = [torch.tensor(x) if not isinstance(x, torch.Tensor) else x for x in tensors]
+        return _original_torch_stack(tensors, *args, **kwargs)
+
+    torch.stack = _patched_torch_stack
+
+    # Patch OpenPI's collate function to handle HuggingFace Column objects
+    import openpi.training.data_loader as openpi_data_loader
+
+    def _patched_collate_fn(items):
+        """Collate the batch elements into batched numpy arrays.
+
+        This patched version handles HuggingFace Column objects that don't
+        properly convert with np.asarray(). Instead, we use np.array() which
+        handles more cases correctly.
+        """
+        def to_numpy(x):
+            """Convert any array-like object to numpy array."""
+            if isinstance(x, np.ndarray):
+                return x
+            # Use np.array() instead of np.asarray() to handle HuggingFace Columns
+            return np.array(x)
+
+        return jax.tree.map(lambda *xs: np.stack([to_numpy(x) for x in xs], axis=0), *items)
+
+    # Replace the collate function before it's used
+    openpi_data_loader._collate_fn = _patched_collate_fn
+
+    # Now import create_data_loader
+    from openpi.training.data_loader import create_data_loader
+
+    # Load and configure
+    if custom_config:
+        typer.echo(f"Loading custom config from '{custom_config}'...")
+        try:
+            # Load custom config module
+            import importlib.util
+            import sys
+
+            spec = importlib.util.spec_from_file_location("custom_config", custom_config)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Could not load module from {custom_config}")
+
+            custom_module = importlib.util.module_from_spec(spec)
+            sys.modules["custom_config"] = custom_module
+            spec.loader.exec_module(custom_module)
+
+            # Get the data config class (should end with DataConfig)
+            data_config_class = None
+            for name in dir(custom_module):
+                obj = getattr(custom_module, name)
+                if isinstance(obj, type) and name.endswith("DataConfig") and name != "DataConfig":
+                    data_config_class = obj
+                    break
+
+            if data_config_class is None:
+                raise ValueError(f"No DataConfig class found in {custom_config}")
+
+            typer.echo(f"  Found config class: {data_config_class.__name__}")
+
+            # Create data config instance
+            data_config_instance = data_config_class(repo_id=dataset, assets=None, base_config=None)
+
+            # Use pi05_libero as base and replace data config
+            config = openpi_config.get_config('pi05_libero')
+            config = dataclasses.replace(config, data=data_config_instance)
+
+        except Exception as e:
+            typer.echo(f"Error loading custom config: {e}", err=True)
+            raise typer.Exit(1)
+    else:
+        typer.echo(f"Loading OpenPI config '{config_name}'...")
+        try:
+            config = openpi_config.get_config(config_name)
+        except KeyError:
+            typer.echo(f"Error: Unknown config '{config_name}'", err=True)
+            typer.echo("Available configs: pi05_libero, pi05_droid, pi0_libero, etc.", err=True)
+            raise typer.Exit(1)
+
+    # Update config with training parameters
+    # Only update repo_id if not using custom config (custom config already has it set)
+    if custom_config:
+        config = dataclasses.replace(
+            config,
+            batch_size=batch_size,
+            num_train_steps=steps,
+            num_workers=0,  # Disable multiprocessing to avoid pickling issues with patched functions
+        )
+    else:
+        config = dataclasses.replace(
+            config,
+            data=dataclasses.replace(config.data, repo_id=dataset),
+            batch_size=batch_size,
+            num_train_steps=steps,
+            num_workers=0,  # Disable multiprocessing to avoid pickling issues with patched functions
+        )
 
     typer.echo(f"\nTraining Pi0.5:")
     typer.echo(f"  Dataset: {dataset}")
