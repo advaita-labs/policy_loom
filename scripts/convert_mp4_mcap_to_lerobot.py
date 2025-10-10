@@ -79,15 +79,24 @@ def enrich_samples_with_joint_data(samples, joint_series, task: str):
     return samples
 
 
-def main(args: argparse.Namespace) -> None:
-    input_dir = Path(args.input).expanduser().resolve()
-    output_dir = Path(args.output).expanduser().resolve()
-    mcap_path = input_dir / "run19_0.mcap"
+def _discover_run_directories(input_dir: Path) -> list[Path]:
+    runs = sorted(p for p in input_dir.iterdir() if p.is_dir() and p.name.startswith("run"))
+    if not runs:
+        raise ValueError(f"No run directories found under {input_dir}")
+    return runs
 
+
+def _convert_single_run(run_dir: Path, output_root: Path, args: argparse.Namespace) -> None:
+    mcap_files = sorted(run_dir.glob("*.mcap"))
+    if not mcap_files:
+        raise FileNotFoundError(f"No MCAP file found in {run_dir}")
+    mcap_path = mcap_files[0]
+
+    video_dir = run_dir / "videos"
     video_map = {
-        "left_cam": input_dir / "videos" / "left_arm.perception_interface.left_cam.state.mp4",
-        "right_cam": input_dir / "videos" / "right_arm.perception_interface.right_cam.state.mp4",
-        "middle_cam": input_dir / "videos" / "torso.perception_interface.middle_cam.state.mp4",
+        "left_cam": video_dir / "left_arm.perception_interface.left_cam.state.mp4",
+        "right_cam": video_dir / "right_arm.perception_interface.right_cam.state.mp4",
+        "middle_cam": video_dir / "torso.perception_interface.middle_cam.state.mp4",
     }
 
     readers = [
@@ -96,7 +105,6 @@ def main(args: argparse.Namespace) -> None:
         SynchronizedVideoMCAPReader(video_path=video_map["middle_cam"], mcap_path=mcap_path, camera_topic="torso/perception_interface/middle_cam/state", camera_name="middle_cam"),
     ]
 
-    merged_samples = list(merge_streams(*readers, time_tolerance=args.time_tolerance))
     merged_samples = list(merge_streams(*readers, time_tolerance=args.time_tolerance))
     filtered_samples = filter_samples_by_cameras(
         merged_samples,
@@ -120,8 +128,9 @@ def main(args: argparse.Namespace) -> None:
     first_sample = enriched_samples[0]
     camera_shapes = {cam.name: tuple(cam.image.shape) for cam in first_sample.cameras}
 
+    repo_id = f"{args.repo_id.rstrip('/')}/{run_dir.name}"
     writer = LeRobotDatasetWriter(
-        repo_id=args.repo_id,
+        repo_id=repo_id,
         robot_type=args.robot_type,
         fps=args.fps,
         camera_names=["left_cam", "right_cam", "middle_cam"],
@@ -136,12 +145,22 @@ def main(args: argparse.Namespace) -> None:
     writer.consolidate(push_to_hub=False)
 
 
+def main(args: argparse.Namespace) -> None:
+    input_dir = Path(args.input).expanduser().resolve()
+    output_dir = Path(args.output).expanduser().resolve()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    run_dirs = _discover_run_directories(input_dir)
+    for run_dir in run_dirs:
+        _convert_single_run(run_dir, output_dir, args)
+
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Convert MP4 + MCAP recordings into a LeRobot dataset")
-    parser.add_argument("--input", required=True, help="Path to recording directory containing run*.mcap, videos/")
-    parser.add_argument("--output", required=True, help="Output directory for the LeRobot dataset")
+    parser = argparse.ArgumentParser(description="Convert MP4 + MCAP recordings into LeRobot dataset episodes")
+    parser.add_argument("--input", required=True, help="Path with one or more run* directories")
+    parser.add_argument("--output", required=True, help="Output directory for generated LeRobot dataset(s)")
     parser.add_argument("--task", required=True, help="Task description to store with each sample")
-    parser.add_argument("--repo-id", default="local/run19", help="Dataset identifier")
+    parser.add_argument("--repo-id", default="local/dataset", help="Base dataset identifier (run name appended)")
     parser.add_argument("--robot-type", default="dual_arm", help="Robot type metadata")
     parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--use-videos", action="store_true", help="Store frames as videos (default: images)")
