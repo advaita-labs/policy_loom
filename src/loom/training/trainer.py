@@ -1,6 +1,7 @@
 """Generic trainer for VLA models."""
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -282,7 +283,11 @@ class Trainer:
         if torch.cuda.is_available():
             device = torch.device("cuda")
             logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}")
-        elif torch.backends.mps.is_available():
+        elif (
+            os.environ.get("LOOM_ENABLE_MPS", "0") == "1"
+            and hasattr(torch.backends, "mps")
+            and torch.backends.mps.is_available()
+        ):
             device = torch.device("mps")
             logger.info("Using Apple Silicon MPS")
         else:

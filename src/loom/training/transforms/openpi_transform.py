@@ -76,13 +76,18 @@ class OpenPITransform:
         Raises:
             ValueError: If batch is missing required fields
         """
-        from openpi.models.model import Observation
+        # Validate and prepare actions early
+        if "action" not in batch:
+            raise ValueError("Batch must contain 'action' field")
+
+        actions = batch["action"]
+        if not isinstance(actions, torch.Tensor):
+            actions = torch.from_numpy(np.array(actions, dtype=np.float32))
 
         # Initialize observation dict
         obs_data: dict[str, torch.Tensor] = {}
 
-        # Get batch size
-        batch_size = len(batch["action"])
+        batch_size = len(actions)
 
         # 1. Process images
         if "images" in batch and batch["images"] is not None:
@@ -122,15 +127,14 @@ class OpenPITransform:
             obs_data["tokenized_prompt"] = torch.ones((batch_size, 1), dtype=torch.int32)
             obs_data["tokenized_prompt_mask"] = torch.ones((batch_size, 1), dtype=torch.bool)
 
-        # 4. Extract actions
-        if "action" not in batch:
-            raise ValueError("Batch must contain 'action' field")
+        # 4. Actions already validated above
 
-        actions = batch["action"]
-        if not isinstance(actions, torch.Tensor):
-            actions = torch.from_numpy(np.array(actions, dtype=np.float32))
+        try:
+            from openpi.models.model import Observation
+        except ImportError:  # pragma: no cover
+            logger.warning("OpenPI not installed; returning raw observation dictionary.")
+            return obs_data, actions
 
-        # Pad actions to 32 dimensions if needed (OpenPI hardcodes action_dim=32 in model architecture)
         if actions.shape[-1] < 32:
             padding = torch.zeros((*actions.shape[:-1], 32 - actions.shape[-1]), dtype=actions.dtype)
             actions = torch.cat([actions, padding], dim=-1)
@@ -140,9 +144,7 @@ class OpenPITransform:
                 f"Cannot truncate actions. Please check your dataset."
             )
 
-        # Create Observation object
         observation = Observation.from_dict(obs_data)
-
         return observation, actions
 
     def _to_numpy_uint8(self, img: np.ndarray | Any) -> np.ndarray:
@@ -217,14 +219,19 @@ class OpenPITransform:
                     cam_images.append(img_uint8)
 
             # Stack to (B, H, W, 3)
-            images_tensor = torch.from_numpy(np.stack(cam_images, axis=0))
+            images_tensor = torch.from_numpy(np.stack(cam_images, axis=0)).float()
+            images_tensor = (images_tensor / 255.0) * 2.0 - 1.0
             images_dict[output_cam_name] = images_tensor
 
             # Create masks (all True for real images)
             masks_dict[output_cam_name] = torch.ones(batch_size, dtype=torch.bool)
 
-        # Return with singular keys 'image' and 'image_mask' as expected by Observation.from_dict
-        return {"image": images_dict, "image_mask": masks_dict}
+        return {
+            "image": images_dict,
+            "image_mask": masks_dict,
+            "images": images_dict,
+            "image_masks": masks_dict,
+        }
 
     def _process_state(self, observation: torch.Tensor | np.ndarray) -> torch.Tensor:
         """Process proprioceptive state.

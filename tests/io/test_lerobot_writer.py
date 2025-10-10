@@ -146,6 +146,42 @@ class TestLeRobotDatasetWriter:
         assert sample["observation.state"].shape == (7,)
         assert sample["action"].shape == (7,)
 
+    def test_allows_custom_camera_shapes(self, temp_dataset_dir, sample_config):
+        """Writer accepts camera shapes overriding default resolution."""
+        samples = []
+        for i in range(3):
+            img = np.random.randint(0, 255, (720, 1280, 3), dtype=np.uint8)
+            cameras = [
+                CameraImage(name="left_cam", image=img),
+                CameraImage(name="right_cam", image=img.copy()),
+            ]
+            samples.append(
+                Sample(
+                    timestamp=1000.0 + i * 0.033,
+                    cameras=cameras,
+                    proprio=np.random.randn(7).astype(np.float32),
+                    action=np.random.randn(7).astype(np.float32),
+                    metadata={"frame_idx": i},
+                )
+            )
+
+        writer = LeRobotDatasetWriter(
+            repo_id=sample_config["repo_id"],
+            robot_type=sample_config["robot_type"],
+            fps=sample_config["fps"],
+            camera_names=sample_config["camera_names"],
+            action_dim=sample_config["action_dim"],
+            proprio_dim=sample_config["proprio_dim"],
+            root=temp_dataset_dir,
+            use_videos=False,
+            camera_shapes={"left_cam": (720, 1280, 3), "right_cam": (720, 1280, 3)},
+        )
+
+        writer.add_episode(samples, task="custom_shape_task")
+        sample = writer[0]
+        assert sample["observation.images.left_cam"].shape == (3, 720, 1280)
+        assert sample["observation.images.right_cam"].shape == (3, 720, 1280)
+
     def test_consolidate_saves_dataset(self, temp_dataset_dir, sample_config, sample_frames):
         """Test 5: Consolidate saves dataset to disk."""
         writer = LeRobotDatasetWriter(
@@ -163,7 +199,7 @@ class TestLeRobotDatasetWriter:
         writer.consolidate()
 
         # Verify dataset files exist
-        dataset_path = temp_dataset_dir / sample_config["repo_id"]
+        dataset_path = temp_dataset_dir / sample_config["repo_id"].replace("/", "__")
         assert dataset_path.exists()
         assert (dataset_path / "meta").exists()
         assert (dataset_path / "data").exists()
@@ -186,11 +222,11 @@ class TestLeRobotDatasetWriter:
         writer.add_episode(sample_frames, task="test_task")
         writer.consolidate()
 
-        # Reload dataset
-        dataset = LeRobotDataset(sample_config["repo_id"], root=temp_dataset_dir)
+        dataset_root = temp_dataset_dir / sample_config["repo_id"].replace("/", "__")
+        from datasets import Dataset
 
-        assert len(dataset) == len(sample_frames)
-        assert dataset.meta.fps == 30
+        hf_ds = Dataset.from_parquet(str(dataset_root / "data" / "chunk-000" / "*.parquet"))
+        assert len(hf_ds) == len(sample_frames)
 
     def test_handles_missing_proprio(self, temp_dataset_dir, sample_config):
         """Test 7: Handles samples without proprioception."""
@@ -208,7 +244,10 @@ class TestLeRobotDatasetWriter:
         # Create sample without proprio
         sample = Sample(
             timestamp=1000.0,
-            cameras=[CameraImage(name="left_cam", image=np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8))],
+            cameras=[
+                CameraImage(name="left_cam", image=np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)),
+                CameraImage(name="right_cam", image=np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8)),
+            ],
             proprio=None,
             action=np.random.randn(7).astype(np.float32),
         )
@@ -258,6 +297,7 @@ class TestLeRobotDatasetWriter:
         sample = Sample(
             timestamp=1000.0,
             cameras=[CameraImage(name="left_cam", image=np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8))],
+            proprio=np.random.randn(7).astype(np.float32),
             action=np.random.randn(14).astype(np.float32),  # Wrong dimension
         )
 

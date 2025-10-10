@@ -5,6 +5,19 @@ from typing import Any
 
 import torch
 import torch.nn as nn
+
+try:  # Maintain compatibility with newer huggingface_hub versions
+    from huggingface_hub import cached_download
+except ImportError:  # pragma: no cover
+    from huggingface_hub import hf_hub_download
+
+    def cached_download(*args, **kwargs):
+        return hf_hub_download(*args, **kwargs)
+
+    import huggingface_hub
+
+    huggingface_hub.cached_download = cached_download
+
 from diffusers import DDPMScheduler
 from torch.utils.data import DataLoader, Dataset
 

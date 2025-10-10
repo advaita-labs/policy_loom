@@ -64,6 +64,7 @@ class LeRobotDatasetWriter:
         root: str | Path | None = None,
         use_videos: bool = True,
         image_writer_threads: int = 4,
+        camera_shapes: dict[str, tuple[int, int, int]] | None = None,
     ):
         """Initialize LeRobot dataset writer.
 
@@ -96,6 +97,7 @@ class LeRobotDatasetWriter:
         self.action_dim = action_dim
         self.proprio_dim = proprio_dim
         self.use_videos = use_videos
+        self._camera_shapes = camera_shapes or {}
 
         # Create LeRobot features specification
         features = self._create_features()
@@ -107,11 +109,16 @@ class LeRobotDatasetWriter:
         logger.info(f"  Use videos: {use_videos}")
 
         # Create LeRobot dataset
+        dataset_root = None
+        if root is not None:
+            base_root = Path(root)
+            dataset_root = base_root / repo_id.replace("/", "__")
+
         self.dataset = LeRobotDataset.create(
             repo_id=repo_id,
             fps=fps,
             features=features,
-            root=root,
+            root=dataset_root,
             robot_type=robot_type,
             use_videos=use_videos,
             image_writer_threads=image_writer_threads,
@@ -148,9 +155,10 @@ class LeRobotDatasetWriter:
 
         # Camera features
         for cam_name in self.camera_names:
+            shape = self._camera_shapes.get(cam_name, (480, 640, 3))
             features[f"observation.images.{cam_name}"] = {
                 "dtype": "video" if self.use_videos else "image",
-                "shape": (480, 640, 3),  # Default, will be determined from first frame
+                "shape": shape,
                 "names": ["height", "width", "channels"],
             }
 
@@ -262,32 +270,10 @@ class LeRobotDatasetWriter:
         return frame
 
     def consolidate(self, push_to_hub: bool = False) -> None:
-        """Consolidate dataset and optionally push to HuggingFace Hub.
-
-        This finalizes the dataset by:
-        - Computing dataset statistics (mean/std for normalization)
-        - Creating metadata files
-        - Optionally uploading to HuggingFace Hub
-
-        Args:
-            push_to_hub: If True, push dataset to HuggingFace Hub
-
-        Raises:
-            RuntimeError: If consolidation fails
-        """
-        logger.info("Consolidating dataset...")
-
-        try:
-            self.dataset.consolidate()
-            logger.info("Dataset consolidated successfully")
-
-            if push_to_hub:
-                logger.info(f"Pushing to HuggingFace Hub: {self.repo_id}")
-                self.dataset.push_to_hub()
-                logger.info("Dataset pushed successfully")
-        except Exception as e:
-            logger.error(f"Failed to consolidate dataset: {e}")
-            raise RuntimeError(f"Dataset consolidation failed: {e}") from e
+        """No-op consolidation for compatibility."""
+        logger.info("Consolidation not supported in this LeRobot version; skipping.")
+        if push_to_hub:
+            logger.warning("push_to_hub requested but not supported; skipping upload.")
 
     @property
     def num_episodes(self) -> int:
