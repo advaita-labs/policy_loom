@@ -136,7 +136,7 @@ def _convert_single_run(run_dir: Path, output_root: Path, args: argparse.Namespa
         camera_names=["left_cam", "right_cam", "middle_cam"],
         action_dim=32,
         proprio_dim=enriched_samples[0].proprio.size,
-        root=output_dir,
+        root=output_root,
         use_videos=args.use_videos,
         camera_shapes=camera_shapes,
     )
