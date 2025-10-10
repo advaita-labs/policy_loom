@@ -199,7 +199,7 @@ class LeRobotDatasetWriter:
             self.dataset.add_frame(frame)
 
         # Save episode
-        self.dataset.save_episode(task=task)
+        self.dataset.save_episode()
         self._num_episodes += 1
 
         logger.info(f"Episode added successfully (total episodes: {self._num_episodes})")

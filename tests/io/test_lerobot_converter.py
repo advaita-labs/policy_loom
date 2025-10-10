@@ -1,4 +1,6 @@
-A"""Tests for LeRobot conversion utilities."""
+"""Tests for LeRobot conversion utilities."""
+
+from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -8,7 +10,7 @@ import pytest
 
 from loom.core.ports import Reader
 from loom.core.types import CameraImage, Sample
-from loom.io.lerobot.converter import convert_readers_to_lerobot
+from loom.io.lerobot.converter import LeRobotConversionConfig, convert_readers_to_lerobot
 
 
 class DummyReader(Reader):
@@ -66,7 +68,8 @@ class TestConvertReadersToLeRobot:
         readers = [DummyReader(samples)]
         writer = StubWriter()
 
-        frame_count = convert_readers_to_lerobot(readers, writer, task="demo")
+        config = LeRobotConversionConfig(task="demo")
+        frame_count = convert_readers_to_lerobot(readers, writer, config)
 
         assert frame_count == 1
         assert len(writer.episodes) == 1
@@ -84,10 +87,11 @@ class TestConvertReadersToLeRobot:
         ]
 
         writer = StubWriter()
+        config = LeRobotConversionConfig(task="bimanual")
         convert_readers_to_lerobot(
             [DummyReader(left_samples), DummyReader(right_samples)],
             writer,
-            task="bimanual",
+            config,
         )
 
         assert len(writer.episodes) == 1
@@ -105,11 +109,11 @@ class TestConvertReadersToLeRobot:
         def drop_first(batch: list[Sample]) -> list[Sample]:
             return batch[1:]
 
+        config = LeRobotConversionConfig(task="filtered", filters=[drop_first])
         frame_count = convert_readers_to_lerobot(
             [DummyReader(samples)],
             writer,
-            task="filtered",
-            filters=[drop_first],
+            config,
         )
 
         assert frame_count == 1
@@ -118,12 +122,21 @@ class TestConvertReadersToLeRobot:
 
     def test_raises_when_no_readers(self):
         writer = StubWriter()
+        config = LeRobotConversionConfig(task="empty")
         with pytest.raises(ValueError, match="No readers provided"):
-            convert_readers_to_lerobot([], writer, task="empty")
+            convert_readers_to_lerobot([], writer, config)
 
     def test_raises_when_no_samples(self):
         writer = StubWriter()
         reader = DummyReader([])
+        config = LeRobotConversionConfig(task="empty")
 
         with pytest.raises(ValueError, match="No samples available"):
-            convert_readers_to_lerobot([reader], writer, task="empty")
+            convert_readers_to_lerobot([reader], writer, config)
+
+    def test_requires_non_empty_task(self):
+        writer = StubWriter()
+        reader = DummyReader([make_sample(timestamp=0.0, camera_name="left", proprio_dim=2, action_dim=2)])
+
+        with pytest.raises(ValueError, match="task description"):
+            LeRobotConversionConfig(task="")
