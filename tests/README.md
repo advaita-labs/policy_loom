@@ -177,7 +177,6 @@ uv run pytest --cov=loom --cov-report=term-missing
 ## CI/CD
 
 Tests run automatically on:
-- Every commit (via pre-commit hooks)
 - Every pull request (via GitHub Actions)
 - Before releases
 

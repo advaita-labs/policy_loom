@@ -12,10 +12,12 @@ dependencies = [
     "opencv-python>=4.8.0",
     "mcap>=1.0.0",
     "torch>=2.0.0",
-    "transformers==4.53.2",  # Required by openpi with custom patches
+    "transformers==4.53.2",
     "pillow>=10.0.0",
     "pyyaml>=6.0",
     "typer>=0.9.0",
+    "lerobot",
+    "datasets>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -28,17 +30,6 @@ diffusion = [
     "datasets>=2.0.0",  # For loading LeRobot format datasets
 ]
 
-# Pi0.5 using Physical Intelligence's official openpi package
-# Install with: GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
-pi05 = [
-    "openpi @ git+https://github.com/Physical-Intelligence/openpi.git",
-    "datasets>=2.0.0",  # For LeRobot format data loading only
-    "wandb>=0.13.3",
-    "einops>=0.6.0",
-    "pytest>=8.0.0",  # Required by openpi at import time
-    "safetensors>=0.4.0",  # For loading PyTorch checkpoints
-]
-
 # Development dependencies
 dev = [
     "black>=24.0.0",
@@ -47,7 +38,6 @@ dev = [
     "mypy>=1.11.0",
     "pytest>=8.0.0",
     "pytest-cov>=6.0.0",
-    "pre-commit>=4.0.0",
 ]
 
 # All optional features

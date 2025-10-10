@@ -127,8 +127,8 @@ class LeRobotDatasetLoader:
             from datasets import load_dataset
         except ImportError as e:
             raise ImportError(
-                "LeRobot dataset loading requires 'lerobot' and 'datasets' packages. "
-                "Install with: uv sync --extra pi05"
+                "LeRobot dataset loading requires the 'lerobot' and 'datasets' packages. "
+                "Install them with: pip install lerobot datasets"
             ) from e
 
         self.repo_id = repo_id

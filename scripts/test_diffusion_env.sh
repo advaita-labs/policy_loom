@@ -25,24 +25,12 @@ print('✓ Base imports working')
 "
 
 echo ""
-echo "Test 2: Pi05 NOT available (expected)..."
-python3 -c "
-try:
-    from loom.training.adapters.pi05 import Pi05Adapter
-    print('✗ FAIL: Pi05Adapter should not be importable')
-    exit(1)
-except ImportError:
-    print('✓ Pi05 correctly unavailable')
-"
-
-echo ""
-echo "Test 3: Adapter registry..."
+echo "Test 2: Adapter registry..."
 python3 -c "
 from loom.training.adapter import list_adapters
 adapters = list_adapters()
 print(f'Available adapters: {adapters}')
 assert 'diffusion_policy' in adapters
-assert 'pi05' not in adapters
 print('✓ Adapter registry correct')
 "
 

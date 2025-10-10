@@ -7,7 +7,7 @@
 # dataset = LeRobotDataset("lerobot/your_dataset")
 #
 # Then use the training pipeline:
-# See examples in scripts/train_diffusion_policy.py or scripts/train_pi05.py
+# See examples in scripts/train_diffusion_policy.py
 
 # input:
 #   type: mp4

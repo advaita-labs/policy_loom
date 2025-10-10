@@ -1755,7 +1755,7 @@ dependencies = [
     { name = "gdown" },
     { name = "gymnasium" },
     { name = "h5py" },
-    { name = "huggingface-hub", extra = ["cli", "hf-transfer"], marker = "python_full_version < '4.0'" },
+    { name = "huggingface-hub", extra = ["cli", "hf-transfer"], marker = "python_full_version < '4'" },
     { name = "imageio", extra = ["ffmpeg"] },
     { name = "jsonlines" },
     { name = "numba" },
@@ -2996,6 +2996,8 @@ name = "policy-loom"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "datasets" },
+    { name = "lerobot" },
     { name = "mcap" },
     { name = "numpy" },
     { name = "opencv-python" },
@@ -3018,7 +3020,6 @@ dev = [
     { name = "black" },
     { name = "isort" },
     { name = "mypy" },
-    { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
@@ -3028,14 +3029,6 @@ diffusion = [
     { name = "datasets" },
     { name = "diffusers" },
     { name = "einops" },
-    { name = "wandb" },
-]
-pi05 = [
-    { name = "datasets" },
-    { name = "einops" },
-    { name = "openpi" },
-    { name = "pytest" },
-    { name = "safetensors" },
     { name = "wandb" },
 ]
 
@@ -3048,52 +3041,31 @@ dev = [
 requires-dist = [
     { name = "accelerate", marker = "extra == 'diffusion'", specifier = ">=0.13.2" },
     { name = "black", marker = "extra == 'dev'", specifier = ">=24.0.0" },
+    { name = "datasets", specifier = ">=2.0.0" },
     { name = "datasets", marker = "extra == 'diffusion'", specifier = ">=2.0.0" },
-    { name = "datasets", marker = "extra == 'pi05'", specifier = ">=2.0.0" },
     { name = "diffusers", marker = "extra == 'diffusion'", specifier = ">=0.11.1" },
     { name = "einops", marker = "extra == 'diffusion'", specifier = ">=0.6.0" },
-    { name = "einops", marker = "extra == 'pi05'", specifier = ">=0.6.0" },
     { name = "isort", marker = "extra == 'dev'", specifier = ">=5.13.0" },
+    { name = "lerobot" },
     { name = "mcap", specifier = ">=1.0.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11.0" },
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "opencv-python", specifier = ">=4.8.0" },
-    { name = "openpi", marker = "extra == 'pi05'", git = "https://github.com/Physical-Intelligence/openpi.git" },
     { name = "pillow", specifier = ">=10.0.0" },
     { name = "policy-loom", extras = ["diffusion"], marker = "extra == 'all'" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
-    { name = "pytest", marker = "extra == 'pi05'", specifier = ">=8.0.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
-    { name = "safetensors", marker = "extra == 'pi05'", specifier = ">=0.4.0" },
     { name = "torch", specifier = ">=2.0.0" },
     { name = "transformers", specifier = "==4.53.2" },
     { name = "typer", specifier = ">=0.9.0" },
     { name = "wandb", marker = "extra == 'diffusion'", specifier = ">=0.13.3" },
-    { name = "wandb", marker = "extra == 'pi05'", specifier = ">=0.13.3" },
 ]
-provides-extras = ["diffusion", "pi05", "dev", "all"]
+provides-extras = ["diffusion", "dev", "all"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "types-pyyaml", specifier = ">=6.0.12.20250915" }]
-
-[[package]]
-name = "pre-commit"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "cfgv" },
-    { name = "identify" },
-    { name = "nodeenv" },
-    { name = "pyyaml" },
-    { name = "virtualenv" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ff/29/7cf5bbc236333876e4b41f56e06857a87937ce4bf91e117a6991a2dbb02a/pre_commit-4.3.0.tar.gz", hash = "sha256:499fe450cc9d42e9d58e606262795ecb64dd05438943c62b66f6a8673da30b16", size = 193792, upload-time = "2025-08-09T18:56:14.651Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/a5/987a405322d78a73b66e39e4a90e4ef156fd7141bf71df987e50717c321b/pre_commit-4.3.0-py2.py3-none-any.whl", hash = "sha256:2b0747ad7e6e967169136edffee14c16e148a778a54e4f967921aa1ebf2308d8", size = 220965, upload-time = "2025-08-09T18:56:13.192Z" },
-]
 
 [[package]]
 name = "prompt-toolkit"
@@ -4534,7 +4506,7 @@ name = "triton"
 version = "3.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "setuptools" },
+    { name = "setuptools", marker = "platform_machine != 'aarch64' and sys_platform == 'linux'" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/21/2f/3e56ea7b58f80ff68899b1dbe810ff257c9d177d288c6b0f55bf2fe4eb50/triton-3.3.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:b31e3aa26f8cb3cc5bf4e187bf737cbacf17311e1112b781d4a059353dfd731b", size = 155689937, upload-time = "2025-05-29T23:39:44.182Z" },

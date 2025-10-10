@@ -75,26 +75,8 @@ uv sync
 # For DiffusionPolicy training
 uv sync --extra diffusion
 
-# For Pi0.5 training (⚠️ requires separate venv - see below)
-uv sync --extra pi05
-
 # For development
 uv sync --extra dev
-```
-
-### Pi0.5 Installation (Separate Environment)
-
-⚠️ **Important**: Pi0.5 requires a custom transformers branch that conflicts with other models.
-Install in a **separate virtual environment**:
-
-```bash
-# Create dedicated venv for pi0.5
-python -m venv venv-pi05
-source venv-pi05/bin/activate  # On Windows: venv-pi05\Scripts\activate
-
-# Install policy_loom with pi0.5 dependencies
-cd policy_loom
-uv sync --extra pi05
 ```
 
 ## Quick Start
@@ -244,9 +226,6 @@ uv run pytest tests/test_pipeline.py::TestMergeStreams::test_merge_multiple_prop
 ## Development
 
 ```bash
-# Install pre-commit hooks
-pre-commit install
-
 # Run linters
 black src/ tests/
 isort src/ tests/
