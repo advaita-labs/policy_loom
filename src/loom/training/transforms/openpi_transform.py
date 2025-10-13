@@ -261,15 +261,19 @@ class OpenPITransform:
 
         # Tokenize prompts
         try:
-            tokenized = self.tokenizer(
-                prompts,
-                padding=True,
-                truncation=True,
-                return_tensors="pt",
-            )
-
-            tokens = tokenized["input_ids"]
-            mask = tokenized["attention_mask"].bool()
+            # PaligemmaTokenizer uses .tokenize() method, not __call__
+            # Process each prompt and stack results
+            all_tokens = []
+            all_masks = []
+            
+            for prompt in prompts:
+                tokens, mask = self.tokenizer.tokenize(prompt)
+                all_tokens.append(torch.from_numpy(tokens))
+                all_masks.append(torch.from_numpy(mask))
+            
+            # Stack into batch tensors
+            tokens = torch.stack(all_tokens)
+            mask = torch.stack(all_masks).bool()
 
             return tokens, mask
 

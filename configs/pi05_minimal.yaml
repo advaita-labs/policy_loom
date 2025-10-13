@@ -1,0 +1,88 @@
+# Pi0.5 (Physical Intelligence) Minimal Training Configuration
+# 
+# This configuration trains the Pi0.5 model on robot manipulation data.
+# Pi0.5 uses flow matching for action prediction with a Vision-Language-Action architecture.
+#
+# IMPORTANT: Pi0.5 requires OpenPI installation in a separate virtualenv:
+#   python -m venv venv-pi05 && source venv-pi05/bin/activate
+#   GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
+#
+# Then run: loom train configs/pi05_minimal.yaml
+
+model:
+  type: pi05  # Use Pi0.5 adapter
+  
+  # Model architecture
+  action_dim: 32  # REQUIRED: OpenPI hardcodes action_dim to 32
+  action_horizon: 10  # Number of future actions to predict
+  max_token_len: 256  # Maximum prompt token length
+  
+  # PaliGemma vision-language backbone
+  paligemma_variant: "gemma_2b"  # Options: gemma_2b, gemma_7b
+  
+  # Precision settings
+  dtype: "bfloat16"  # Options: bfloat16, float32
+
+training:
+  # Optimizer settings
+  learning_rate: 1.0e-4
+  weight_decay: 0.01
+  
+  # Training schedule
+  batch_size: 2  # Reduced for CPU
+  epochs: 2  # Just 2 epochs for testing
+  
+  # Mixed precision (Pi0.5 specific)
+  mixed_precision: false  # PyTorch implementation doesn't support mixed precision yet
+  
+  # Device settings
+  num_workers: 2  # Reduced for CPU
+  gradient_clip_norm: 1.0
+  
+  # LR Scheduler
+  lr_scheduler:
+    type: cosine
+    min_lr: 1e-6
+    warmup_steps: 100
+
+data:
+  # Dataset paths (LeRobot format)
+  type: lerobot
+  dataset: "/workspace/data/lerobot_output/robot-manipulation__run0"
+  eval_dataset: "/workspace/data/lerobot_output/robot-manipulation__run1"
+  train_split: train
+  eval_split: null
+  local_dir: null
+  
+  # Data preprocessing
+  image_size: [224, 224]  # Height, Width - must match PaliGemma (224x224)
+  
+  # Camera configuration
+  camera_name_mapping:
+    "observation.images.left_cam": "left"
+    "observation.images.right_cam": "right"
+    "observation.images.middle_cam": "top"
+  
+  # Prompt settings
+  default_prompt: "pick and place manipulation"
+
+checkpoints:
+  dir: ./checkpoints/pi05_minimal
+  save_every_steps: null
+  save_every_epochs: 10
+  keep_top_k: 3
+  keep_last_k: 1
+  resume_from: null
+
+evaluation:
+  eval_every_steps: null
+  eval_every_epochs: 5
+  eval_batches: null
+
+logging:
+  log_every_steps: 10
+  log_dir: ./logs
+  wandb:
+    enabled: false
+    project: policy-loom-pi05
+    name: pi05-minimal

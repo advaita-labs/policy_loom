@@ -89,7 +89,8 @@ def _discover_run_directories(input_dir: Path) -> list[Path]:
 def _convert_single_run(run_dir: Path, output_root: Path, args: argparse.Namespace) -> None:
     mcap_files = sorted(run_dir.glob("*.mcap"))
     if not mcap_files:
-        raise FileNotFoundError(f"No MCAP file found in {run_dir}")
+        print(f"⚠️  Skipping {run_dir.name}: No MCAP file found")
+        return
     mcap_path = mcap_files[0]
 
     video_dir = run_dir / "videos"
@@ -98,6 +99,12 @@ def _convert_single_run(run_dir: Path, output_root: Path, args: argparse.Namespa
         "right_cam": video_dir / "right_arm.perception_interface.right_cam.state.mp4",
         "middle_cam": video_dir / "torso.perception_interface.middle_cam.state.mp4",
     }
+    
+    # Check if all required video files exist
+    missing_videos = [name for name, path in video_map.items() if not path.exists()]
+    if missing_videos:
+        print(f"⚠️  Skipping {run_dir.name}: Missing video files: {', '.join(missing_videos)}")
+        return
 
     readers = [
         SynchronizedVideoMCAPReader(video_path=video_map["left_cam"], mcap_path=mcap_path, camera_topic="left_arm/perception_interface/left_cam/state", camera_name="left_cam"),
@@ -151,8 +158,25 @@ def main(args: argparse.Namespace) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     run_dirs = _discover_run_directories(input_dir)
-    for run_dir in run_dirs:
-        _convert_single_run(run_dir, output_dir, args)
+    print(f"📂 Found {len(run_dirs)} run directories")
+    
+    converted = 0
+    skipped = 0
+    
+    for idx, run_dir in enumerate(run_dirs, 1):
+        print(f"\n[{idx}/{len(run_dirs)}] Processing {run_dir.name}...")
+        try:
+            _convert_single_run(run_dir, output_dir, args)
+            converted += 1
+            print(f"✅ Converted {run_dir.name}")
+        except Exception as e:
+            print(f"❌ Failed to convert {run_dir.name}: {e}")
+            skipped += 1
+    
+    print(f"\n{'='*60}")
+    print(f"✅ Successfully converted: {converted}/{len(run_dirs)}")
+    print(f"⚠️  Skipped: {skipped}/{len(run_dirs)}")
+    print(f"{'='*60}")
 
 
 if __name__ == "__main__":

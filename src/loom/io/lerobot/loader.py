@@ -137,13 +137,30 @@ class LeRobotDatasetLoader:
 
         logger.info(f"Loading LeRobot dataset: {repo_id} (split={split})")
 
-        # Load dataset from HuggingFace Hub
+        # Load dataset from HuggingFace Hub or local directory
         try:
-            self.dataset = load_dataset(
-                repo_id,
-                split=split,
-                cache_dir=str(local_dir) if local_dir else None,
-            )
+            # Check if it's a local path with LeRobot structure
+            repo_path = Path(repo_id)
+            if repo_path.exists() and (repo_path / "data").exists():
+                # Local LeRobot dataset - load parquet files from data/chunk-*/
+                import glob
+                parquet_files = glob.glob(str(repo_path / "data" / "chunk-*" / "*.parquet"))
+                if parquet_files:
+                    logger.info(f"Loading {len(parquet_files)} parquet files from local dataset")
+                    self.dataset = load_dataset(
+                        "parquet",
+                        data_files=parquet_files,
+                        split=split or "train",
+                    )
+                else:
+                    raise ValueError(f"No parquet files found in {repo_path}/data/chunk-*/")
+            else:
+                # HuggingFace Hub dataset
+                self.dataset = load_dataset(
+                    repo_id,
+                    split=split,
+                    cache_dir=str(local_dir) if local_dir else None,
+                )
             logger.info(f"Loaded {len(self.dataset)} samples from {repo_id}")
         except Exception as e:
             raise ValueError(f"Failed to load dataset {repo_id}: {e}") from e

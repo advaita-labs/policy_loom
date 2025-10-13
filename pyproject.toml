@@ -33,6 +33,26 @@ diffusion = [
     "datasets>=2.0.0",  # For loading LeRobot format datasets
 ]
 
+# Pi0.5 (Physical Intelligence) model training dependencies
+# WARNING: Cannot coexist with diffusion extra due to transformers version conflicts
+# Create separate virtualenv: python -m venv venv-pi05 && source venv-pi05/bin/activate
+# Then run: GIT_LFS_SKIP_SMUDGE=1 uv sync --extra pi05
+pi05 = [
+    "openpi",  # Physical Intelligence Pi0.5 model (from GitHub)
+    "torch==2.7.1",  # Exact version from OpenPI
+    "transformers==4.53.2",  # Exact version - required for AdaRMS patches
+    "sentencepiece>=0.2.0",  # Tokenizer support
+    "jaxtyping==0.2.36",  # Type annotations for arrays
+    "beartype==0.19.0",  # Runtime type checking
+    "filelock>=3.16.1",  # File locking for model caching
+    "rich>=14.0.0",  # Terminal formatting
+    "fsspec[gcs]>=2024.6.0",  # File system abstractions
+    "imageio>=2.36.1",  # Image I/O
+    "einops>=0.8.0",  # Tensor operations
+    "wandb>=0.19.1",  # Experiment tracking
+    "safetensors>=0.4.0",  # Safe tensor storage
+]
+
 # Development dependencies
 dev = [
     "black>=24.0.0",
@@ -43,9 +63,9 @@ dev = [
     "pytest-cov>=6.0.0",
 ]
 
-# All optional features
+# All optional features (mutually exclusive groups)
 all = [
-    "policy-loom[diffusion]",
+    "policy-loom[diffusion,dev]",
 ]
 
 [project.scripts]
@@ -106,6 +126,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = ""
+
+[tool.uv.sources]
+# OpenPI from Physical Intelligence GitHub repo (for pi05 extra)
+# Note: This will only be installed when using --extra pi05
+openpi = { git = "https://github.com/physical-intelligence/openpi", rev = "main" }
 
 [dependency-groups]
 dev = [
